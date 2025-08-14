@@ -1,6 +1,5 @@
 ####LOAD####
-#make the comments in english
-# This script creates demographic tables for the Preeclampsia project.
+# This script creates demographic tables.
 # The tables are created using the metadata from the phyloseq object and saved as CSV files.
 # The script includes functions to create tables for all samples, Hispanic samples, and Non-Hispanic White samples.
 # The tables include various demographic variables and are stratified by study group or severity.

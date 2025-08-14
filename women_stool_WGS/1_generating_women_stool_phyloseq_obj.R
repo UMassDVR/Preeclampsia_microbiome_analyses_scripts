@@ -1,12 +1,6 @@
-#PRINCIPAL: here:
-#0. We used GTBD taxonomy
-#1. We calculate metaphlan alpha and beta div indices using relative abundance
-#2. We combine metadata with alpha diversity indexes of stool by metagenomic, metaphlan 
-#3. We generate relative abundance SGB table at SPECIES or GENUS or CLASS or PHYLUM level
-#4. And then combine the the species/genus/class relative abundance with the metadata with the alpha diversity all 3 together. 
- 
-#(Beta diversity matrix is apart since it has a matrix format)
+# Genaration of phyloseq object from the women stool sample from WGS 
 
+# LOAD LIBRARIES
 library(forcats)
 library(dplyr)
 library(data.table) #for fread function
@@ -14,7 +8,7 @@ library(purrr)
 library(anthro)
 library(tidyr)
 
-
+####LOAD####
 setwd("~/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/")
 
 #### metadata REDCap
@@ -23,8 +17,7 @@ met=read.csv("met/met_clean0.csv")
 # remove duplicated study_id
 met <- met[!duplicated(met$study_id), ]
 
-dim(met)
-
+# Load alpha  div indices using relative abundance from metaphlan
 obs <- read.csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/seqs/mom/rel_ab/gtdb/diversity_analysis/gtdb_merged_rel_ab_table_richness.tsv", sep="\t", header=TRUE)
 sha <- read.csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/seqs/mom/rel_ab/gtdb/diversity_analysis/gtdb_merged_rel_ab_table_shannon.tsv", sep="\t", header=TRUE)
 simp <- read.csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/seqs/mom/rel_ab/gtdb/diversity_analysis/gtdb_merged_rel_ab_table_simpson.tsv", sep="\t", header=TRUE)
@@ -34,7 +27,7 @@ obs$study_id <- rownames(obs)
 sha$study_id <- rownames(sha)
 simp$study_id <- rownames(simp)
 
-#Compbine 
+#Combine 
 div <- merge(obs, sha, by = "study_id")
 div <- merge(div, simp, by = "study_id")
 

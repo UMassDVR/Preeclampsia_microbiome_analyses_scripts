@@ -1,12 +1,10 @@
 ---
 title: "R Notebook"
-output: html_notebook
 ---
-All microbiome analyses for WGS from women stool samples
+All microbiome analyses for WGS from women stool samples from the already created phyloseq object.
 
 ```{r setup}
 knitr::opts_knit$set(root.dir = normalizePath(".."))
-    
 ```
 
 # LOAD packages

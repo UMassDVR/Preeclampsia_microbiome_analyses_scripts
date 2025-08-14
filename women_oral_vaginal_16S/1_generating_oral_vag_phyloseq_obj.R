@@ -1,5 +1,5 @@
-# Generating the phyloseq object
-#write all comments of this script in english
+# Generating the phyloseq object for the oral and vaginal samples
+
 
 #load the necessary libraries
 library(phyloseq)
