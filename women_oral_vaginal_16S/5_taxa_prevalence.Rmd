@@ -1,0 +1,661 @@
+---
+title: "Prevalencia"
+output: html_notebook
+---
+
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/")) 
+
+```
+#LOAD
+```{r}
+
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggprism)
+library(MASS)
+library(vegan)
+
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/R/phy_objects/PHYrar_alpha_ggext_subset02_newseqs.RData")
+```
+
+# Prevalence tables (no filtering)
+
+```{r}
+# --- Inicio del Script ---
+
+physeq <- PHYrar_alpha_ggext_subset02_newseqs
+
+physeq_genus <- tax_glom(physeq, taxrank = "Genus")
+
+# --- Función para Prevalencia y Cuentas ---
+calc_prevalence_counts <- function(physeq, group_var = "study_group", taxa_level = "Genus") {
+  counts <- as(otu_table(physeq), "matrix")
+  sample_inf <- data.frame(sample_data(physeq))
+  groups <- sample_inf[[group_var]]
+  taxa_names <- as.vector(tax_table(physeq)[, taxa_level])
+  taxa_names[is.na(taxa_names)] <- "Unclassified"
+  
+  results <- data.frame(Genus = taxa_names, stringsAsFactors = FALSE)
+  
+  for (g in unique(groups)) {
+    group_counts <- counts[, groups == g, drop = FALSE]
+    prevalence <- rowSums(group_counts > 0) / sum(groups == g) * 100
+    count <- rowSums(group_counts > 0)
+    results[[paste0("Prevalence_", g)]] <- prevalence
+    results[[paste0("Count_", g)]] <- count
+  }
+  return(results)
+}
+
+# --- Función para calcular p-valores Fisher ---
+calc_differences_pvalues <- function(prev_table, group1, group2, physeq, group_var = "study_group") {
+  results <- prev_table
+  sample_metadata <- data.frame(sample_data(physeq))
+  total1 <- sum(sample_metadata[[group_var]] == group1)
+  total2 <- sum(sample_metadata[[group_var]] == group2)
+
+  results$Difference <- results[[paste0("Prevalence_", group1)]] - results[[paste0("Prevalence_", group2)]]
+  
+  results$P_value <- sapply(1:nrow(results), function(i) {
+    present1 <- results[[paste0("Count_", group1)]][i]
+    present2 <- results[[paste0("Count_", group2)]][i]
+    absent1 <- total1 - present1
+    absent2 <- total2 - present2
+    table <- matrix(c(present1, present2, absent1, absent2), nrow = 2, byrow = TRUE)
+    fisher.test(table)$p.value
+  })
+  
+  results$Q_value <- p.adjust(results$P_value, method = "fdr")
+  return(results)
+}
+
+# --- Función para formatear la tabla final ---
+format_table <- function(data) {
+  data$P_value_formatted <- ifelse(is.na(data$P_value), "NA", sprintf("%.5f", data$P_value))
+  data$Significance <- ""
+  data$Significance[data$P_value < 0.05] <- "*"
+  data$Significance[data$P_value < 0.01] <- "**"
+  data$Significance[data$P_value < 0.001] <- "***"
+  
+  formatted <- data.frame(
+    Genus = data$Genus,
+    Control_count = data$Count_Control,
+    Control_percent = sprintf("%.2f%%", data$Prevalence_Control),
+    PE_count = data$Count_PE,
+    PE_percent = sprintf("%.2f%%", data$Prevalence_PE),
+    Difference = sprintf("%.2f%%", data$Difference),
+    P_value = paste0(data$P_value_formatted, data$Significance),
+    Q_value = sprintf("%.4f", data$Q_value),
+    stringsAsFactors = FALSE
+  )
+  return(formatted)
+}
+
+# --- ANALIZAR POR BODY SITE ---
+
+# Vaginal
+physeq_vag <- subset_samples(physeq_genus, body_site == "Vaginal")
+prev_vag <- calc_prevalence_counts(physeq_vag)
+final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+final_vag <- final_vag[order(final_vag$P_value), ]  # 🔻 ordenar por p-valor
+table_vag <- format_table(final_vag)
+write.csv(table_vag, "all_indiv_prevalencia_cuentas_Vaginal.csv", row.names = FALSE)
+
+# MomTongue
+physeq_mom <- subset_samples(physeq_genus, body_site == "MomTongue")
+prev_mom <- calc_prevalence_counts(physeq_mom)
+final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+final_mom <- final_mom[order(final_mom$P_value), ]  # 🔻 ordenar por p-valor
+table_mom <- format_table(final_mom)
+write.csv(table_mom, "all_indiv_prevalencia_cuentas_MomTongue.csv", row.names = FALSE)
+
+# Mostrar resultados ordenados
+cat("Tabla para Vaginal (Top 10):\n")
+print(head(table_vag, 10))
+
+cat("\nTabla para MomTongue (Top 10):\n")
+print(head(table_mom, 10))
+
+```
+
+# Core taxa prevalences (taxa with > 40% oof prevalence) for oral and vaginal
+```{r}
+
+# --- 2. Analysis Workflow ---
+
+# Load your initial phyloseq object
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+
+# Agglomerate at Genus level BEFORE filtering
+# This is better as prevalence at the genus level is more stable
+physeq_genus_raw <- tax_glom(physeq_raw, taxrank = "Genus", NArm = FALSE)
+
+# --- Define filtering criteria ---
+PREVALENCE_THRESHOLD <- 0.40 # 40% prevalence within the body site
+ABUNDANCE_THRESHOLD <- 0.00  # 
+
+# --- Create a list to store filtered data for each site ---
+physeq_site_filtered_list <- list()
+
+# Get all unique body sites from your data
+body_sites <- unique(as.character(sample_data(physeq_genus_raw)$body_site))
+
+# --- Loop through each body site to filter it independently ---
+for (site in body_sites) {
+  cat(paste("\n--- Filtering site:", site, "---\n"))
+
+  # 1. Subset the data for the current site
+  physeq_subset <- subset_samples(physeq_genus_raw, body_site == site)
+
+  # 2. Apply prevalence filter ON THIS SUBSET
+  # This creates a logical vector: TRUE for taxa to keep, FALSE for taxa to discard.
+  prev_filter <- genefilter_sample(physeq_subset, filterfun_sample(function(x) x > 0), A = PREVALENCE_THRESHOLD * nsamples(physeq_subset))
+
+  # --- FIX IS HERE ---
+  # Use the 'prev_filter' variable that you just calculated.
+  taxa_to_keep <- prev_filter
+
+  # 3. Prune taxa for the current site
+  physeq_site_filtered <- prune_taxa(taxa_to_keep, physeq_subset)
+
+  cat(paste("Original taxa in this site:", ntaxa(physeq_subset), "\n"))
+  cat(paste("Taxa remaining after filtering:", ntaxa(physeq_site_filtered), "\n"))
+
+  # Store the filtered phyloseq object in the list
+  physeq_site_filtered_list[[site]] <- physeq_site_filtered
+}
+
+# --- 3. Run Analysis on the independently filtered data ---
+# (Vaginal, MomTongue, etc.)
+
+
+# --- 3. Run Analysis on the independently filtered data ---
+
+# Vaginal
+physeq_vag <- physeq_site_filtered_list[["Vaginal"]]
+if (!is.null(physeq_vag) && nsamples(physeq_vag) > 0 && ntaxa(physeq_vag) > 0) {
+    prev_vag <- calc_prevalence_counts(physeq_vag)
+    final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+    final_vag <- final_vag[order(final_vag$P_value), ]
+    table_vag <- format_table(final_vag)
+    write.csv(table_vag, "P16S/results/prev/site_filtered_prev_40_Vaginal.csv", row.names = FALSE)
+    cat("\nResults for Vaginal:\n")
+    print(table_vag)
+} else {
+    cat("\nNo data left for Vaginal site after filtering.\n")
+}
+
+# MomTongue
+physeq_mom <- physeq_site_filtered_list[["MomTongue"]]
+if (!is.null(physeq_mom) && nsamples(physeq_mom) > 0 && ntaxa(physeq_mom) > 0) {
+    prev_mom <- calc_prevalence_counts(physeq_mom)
+    final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+    final_mom <- final_mom[order(final_mom$P_value), ]
+    table_mom <- format_table(final_mom)
+    write.csv(table_mom, "P16S/results/prev/site_filtered_prev_40_MomTongue.csv", row.names = FALSE)
+    cat("\nResults for MomTongue:\n")
+    print(table_mom)
+} else {
+    cat("\nNo data left for MomTongue site after filtering.\n")
+}
+
+```
+
+# Accesory taxa prevalence (taxa with 20-40% of prevalence) for oral and vaginal
+
+```{r}
+# Load necessary libraries if you haven't already
+# library(phyloseq)
+# library(genefilter)
+
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+
+# Agglomerate at Genus level BEFORE filtering
+physeq_genus_raw <- tax_glom(physeq_raw, taxrank = "Genus", NArm = FALSE)
+
+# --- Define filtering criteria ---
+LOWER_PREV_THRESHOLD <- 0.20 # 20% lower prevalence bound
+UPPER_PREV_THRESHOLD <- 0.40 # 40% upper prevalence bound
+ABUNDANCE_THRESHOLD <- 0.00   # 0% relative abundance threshold
+
+# --- Create a list to store filtered data for each site ---
+physeq_site_filtered_list <- list()
+
+# Get all unique body sites from your data
+body_sites <- unique(as.character(sample_data(physeq_genus_raw)$body_site))
+
+# --- Loop through each body site to filter it independently ---
+for (site in body_sites) {
+  cat(paste("\n--- Filtering site:", site, "---\n"))
+
+  # 1. Subset the data for the current site
+  physeq_subset <- subset_samples(physeq_genus_raw, body_site == site)
+
+  # 2. Apply filters ON THIS SUBSET
+
+  # Prevalence filter (this part works correctly)
+  prevalences <- rowSums(otu_table(physeq_subset) > 0) / nsamples(physeq_subset)
+  
+  # Example for 20-40% range. You would change this line for other filters.
+  taxa_in_range <- prevalences >= 0.20 & prevalences <= 0.40
+
+  # --- FIX IS HERE ---
+  # The abundance filter was overriding the prevalence filter.
+  # We now use *only* the prevalence filter for pruning.
+  taxa_to_keep <- taxa_in_range
+
+  # 3. Prune taxa for the current site
+  physeq_site_filtered <- prune_taxa(taxa_to_keep, physeq_subset)
+
+  cat(paste("Original taxa in this site:", ntaxa(physeq_subset), "\n"))
+  cat(paste("Taxa remaining after filtering:", ntaxa(physeq_site_filtered), "\n"))
+
+  # Store the filtered phyloseq object in the list
+  physeq_site_filtered_list[[site]] <- physeq_site_filtered
+}
+
+# --- 3. Run Analysis on the independently filtered data ---
+
+# Vaginal
+physeq_vag <- physeq_site_filtered_list[["Vaginal"]]
+if (!is.null(physeq_vag) && nsamples(physeq_vag) > 0 && ntaxa(physeq_vag) > 0) {
+    prev_vag <- calc_prevalence_counts(physeq_vag)
+    final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+    final_vag <- final_vag[order(final_vag$P_value), ]
+    table_vag <- format_table(final_vag)
+    # Updated filename to reflect the new prevalence range
+    write.csv(table_vag, "P16S/results/prev/site_filtered_prev_20-40_Vaginal.csv", row.names = FALSE)
+    cat("\nResults for Vaginal:\n")
+    print(table_vag)
+} else {
+    cat("\nNo data left for Vaginal site after filtering.\n")
+}
+
+# MomTongue
+physeq_mom <- physeq_site_filtered_list[["MomTongue"]]
+if (!is.null(physeq_mom) && nsamples(physeq_mom) > 0 && ntaxa(physeq_mom) > 0) {
+    prev_mom <- calc_prevalence_counts(physeq_mom)
+    final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+    final_mom <- final_mom[order(final_mom$P_value), ]
+    table_mom <- format_table(final_mom)
+    # Updated filename to reflect the new prevalence range
+    write.csv(table_mom, "P16S/results/prev/site_filtered_prev_20-40_MomTongue.csv", row.names = FALSE)
+    cat("\nResults for MomTongue:\n")
+    print(table_mom)
+} else {
+    cat("\nNo data left for MomTongue site after filtering.\n")
+}
+```
+
+
+# Among White: Core taxa prevalences (taxa with > 40% of prevalence) for oral and vaginal
+
+
+```{r}
+# --- Inicio del Script ---
+
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+physeq_raw=subset_samples(physeq_raw,race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina") 
+# tabla prevalancencias con filtro por prev 40
+
+# --- 1. Pre-analysis Functions ---
+# NOTA: Las funciones de cálculo (calc_prevalence_counts, etc.) y formato no cambian.
+# Eliminamos la función 'filter_taxa_by_prevalence_and_abundance' porque ahora lo haremos de otra forma.
+
+# [Aquí irían las funciones calc_prevalence_counts, calc_differences_pvalues y format_table
+# ...son las mismas que en tu script, puedes copiarlas y pegarlas aquí]
+
+# --- 2. Analysis Workflow ---
+
+
+
+# Agglomerate at Genus level BEFORE filtering
+# This is better as prevalence at the genus level is more stable
+physeq_genus_raw <- tax_glom(physeq_raw, taxrank = "Genus", NArm = FALSE)
+
+# --- Define filtering criteria ---
+PREVALENCE_THRESHOLD <- 0.40 # 40% prevalence within the body site
+ABUNDANCE_THRESHOLD <- 0.00  # 
+
+# --- Create a list to store filtered data for each site ---
+physeq_site_filtered_list <- list()
+
+# Get all unique body sites from your data
+body_sites <- unique(as.character(sample_data(physeq_genus_raw)$body_site))
+
+# --- Loop through each body site to filter it independently ---
+for (site in body_sites) {
+  cat(paste("\n--- Filtering site:", site, "---\n"))
+
+  # 1. Subset the data for the current site
+  physeq_subset <- subset_samples(physeq_genus_raw, body_site == site)
+
+  # 2. Apply prevalence filter ON THIS SUBSET
+  # This creates a logical vector: TRUE for taxa to keep, FALSE for taxa to discard.
+  prev_filter <- genefilter_sample(physeq_subset, filterfun_sample(function(x) x > 0), A = PREVALENCE_THRESHOLD * nsamples(physeq_subset))
+
+  # --- FIX IS HERE ---
+  # Use the 'prev_filter' variable that you just calculated.
+  taxa_to_keep <- prev_filter
+
+  # 3. Prune taxa for the current site
+  physeq_site_filtered <- prune_taxa(taxa_to_keep, physeq_subset)
+
+  cat(paste("Original taxa in this site:", ntaxa(physeq_subset), "\n"))
+  cat(paste("Taxa remaining after filtering:", ntaxa(physeq_site_filtered), "\n"))
+
+  # Store the filtered phyloseq object in the list
+  physeq_site_filtered_list[[site]] <- physeq_site_filtered
+}
+
+# El resto del script para analizar y escribir los resultados es correcto...
+# --- 3. Run Analysis on the independently filtered data ---
+# (Vaginal, MomTongue, etc.)
+
+
+# --- 3. Run Analysis on the independently filtered data ---
+
+# Vaginal
+physeq_vag <- physeq_site_filtered_list[["Vaginal"]]
+if (!is.null(physeq_vag) && nsamples(physeq_vag) > 0 && ntaxa(physeq_vag) > 0) {
+    prev_vag <- calc_prevalence_counts(physeq_vag)
+    final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+    final_vag <- final_vag[order(final_vag$P_value), ]
+    table_vag <- format_table(final_vag)
+    write.csv(table_vag, "P16S/results/prev/white_site_filtered_prev_40_Vaginal.csv", row.names = FALSE)
+    cat("\nResults for Vaginal:\n")
+    print(table_vag)
+} else {
+    cat("\nNo data left for Vaginal site after filtering.\n")
+}
+
+# MomTongue
+physeq_mom <- physeq_site_filtered_list[["MomTongue"]]
+if (!is.null(physeq_mom) && nsamples(physeq_mom) > 0 && ntaxa(physeq_mom) > 0) {
+    prev_mom <- calc_prevalence_counts(physeq_mom)
+    final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+    final_mom <- final_mom[order(final_mom$P_value), ]
+    table_mom <- format_table(final_mom)
+    write.csv(table_mom, "P16S/results/prev/white_site_filtered_prev_40_MomTongue.csv", row.names = FALSE)
+    cat("\nResults for MomTongue:\n")
+    print(table_mom)
+} else {
+    cat("\nNo data left for MomTongue site after filtering.\n")
+}
+
+
+
+```
+# Among Hispanics: Accesory taxa prevalence (taxa with 20-40% of prevalence) for oral and vaginal
+
+
+```{r}
+# Load necessary libraries if you haven't already
+# library(phyloseq)
+# library(genefilter)
+
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+physeq_raw <- subset_samples(physeq_raw,   ethnicity == "Hispanic/Latina")
+
+# Agglomerate at Genus level BEFORE filtering
+physeq_genus_raw <- tax_glom(physeq_raw, taxrank = "Genus", NArm = FALSE)
+
+# --- Define filtering criteria ---
+LOWER_PREV_THRESHOLD <- 0.20 # 20% lower prevalence bound
+UPPER_PREV_THRESHOLD <- 0.40 # 40% upper prevalence bound
+ABUNDANCE_THRESHOLD <- 0.00   # 0% relative abundance threshold
+
+# --- Create a list to store filtered data for each site ---
+physeq_site_filtered_list <- list()
+
+# Get all unique body sites from your data
+body_sites <- unique(as.character(sample_data(physeq_genus_raw)$body_site))
+
+# --- Loop through each body site to filter it independently ---
+for (site in body_sites) {
+  cat(paste("\n--- Filtering site:", site, "---\n"))
+
+  # 1. Subset the data for the current site
+  physeq_subset <- subset_samples(physeq_genus_raw, body_site == site)
+
+  # 2. Apply filters ON THIS SUBSET
+
+  # Prevalence filter (this part works correctly)
+  prevalences <- rowSums(otu_table(physeq_subset) > 0) / nsamples(physeq_subset)
+  
+  # Example for 20-40% range. You would change this line for other filters.
+  taxa_in_range <- prevalences >= 0.20 & prevalences <= 0.40
+
+  # --- FIX IS HERE ---
+  # The abundance filter was overriding the prevalence filter.
+  # We now use *only* the prevalence filter for pruning.
+  taxa_to_keep <- taxa_in_range
+
+  # 3. Prune taxa for the current site
+  physeq_site_filtered <- prune_taxa(taxa_to_keep, physeq_subset)
+
+  cat(paste("Original taxa in this site:", ntaxa(physeq_subset), "\n"))
+  cat(paste("Taxa remaining after filtering:", ntaxa(physeq_site_filtered), "\n"))
+
+  # Store the filtered phyloseq object in the list
+  physeq_site_filtered_list[[site]] <- physeq_site_filtered
+}
+
+# --- 3. Run Analysis on the independently filtered data ---
+
+# Vaginal
+physeq_vag <- physeq_site_filtered_list[["Vaginal"]]
+if (!is.null(physeq_vag) && nsamples(physeq_vag) > 0 && ntaxa(physeq_vag) > 0) {
+    prev_vag <- calc_prevalence_counts(physeq_vag)
+    final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+    final_vag <- final_vag[order(final_vag$P_value), ]
+    table_vag <- format_table(final_vag)
+    # Updated filename to reflect the new prevalence range
+    write.csv(table_vag, "P16S/results/prev/hispa_site_filtered_prev_20-40_Vaginal.csv", row.names = FALSE)
+    cat("\nResults for Vaginal:\n")
+    print(table_vag)
+} else {
+    cat("\nNo data left for Vaginal site after filtering.\n")
+}
+
+# MomTongue
+physeq_mom <- physeq_site_filtered_list[["MomTongue"]]
+if (!is.null(physeq_mom) && nsamples(physeq_mom) > 0 && ntaxa(physeq_mom) > 0) {
+    prev_mom <- calc_prevalence_counts(physeq_mom)
+    final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+    final_mom <- final_mom[order(final_mom$P_value), ]
+    table_mom <- format_table(final_mom)
+    # Updated filename to reflect the new prevalence range
+    write.csv(table_mom, "P16S/results/prev/hispa_site_filtered_prev_20-40_MomTongue.csv", row.names = FALSE)
+    cat("\nResults for MomTongue:\n")
+    print(table_mom)
+} else {
+    cat("\nNo data left for MomTongue site after filtering.\n")
+}
+```
+
+# Among White: Accesory taxa prevalence (taxa with 20-40% of prevalence) for oral and vaginal
+
+```{r}
+
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+#physeq=subset_samples(physeq,race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina") 
+
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+physeq_raw=subset_samples(physeq_raw,race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina") # tabla prevalancencias con filtro por prev 20-40
+
+# Load necessary libraries if you haven't already
+# library(phyloseq)
+# library(genefilter)
+
+
+# Agglomerate at Genus level BEFORE filtering
+physeq_genus_raw <- tax_glom(physeq_raw, taxrank = "Genus", NArm = FALSE)
+
+# --- Define filtering criteria ---
+LOWER_PREV_THRESHOLD <- 0.20 # 20% lower prevalence bound
+UPPER_PREV_THRESHOLD <- 0.40 # 40% upper prevalence bound
+ABUNDANCE_THRESHOLD <- 0.00   # 0% relative abundance threshold
+
+# --- Create a list to store filtered data for each site ---
+physeq_site_filtered_list <- list()
+
+# Get all unique body sites from your data
+body_sites <- unique(as.character(sample_data(physeq_genus_raw)$body_site))
+
+# --- Loop through each body site to filter it independently ---
+for (site in body_sites) {
+  cat(paste("\n--- Filtering site:", site, "---\n"))
+
+  # 1. Subset the data for the current site
+  physeq_subset <- subset_samples(physeq_genus_raw, body_site == site)
+
+  # 2. Apply filters ON THIS SUBSET
+
+  # Prevalence filter (this part works correctly)
+  prevalences <- rowSums(otu_table(physeq_subset) > 0) / nsamples(physeq_subset)
+  
+  # Example for 20-40% range. You would change this line for other filters.
+  taxa_in_range <- prevalences >= 0.20 & prevalences <= 0.40
+
+  # --- FIX IS HERE ---
+  # The abundance filter was overriding the prevalence filter.
+  # We now use *only* the prevalence filter for pruning.
+  taxa_to_keep <- taxa_in_range
+
+  # 3. Prune taxa for the current site
+  physeq_site_filtered <- prune_taxa(taxa_to_keep, physeq_subset)
+
+  cat(paste("Original taxa in this site:", ntaxa(physeq_subset), "\n"))
+  cat(paste("Taxa remaining after filtering:", ntaxa(physeq_site_filtered), "\n"))
+
+  # Store the filtered phyloseq object in the list
+  physeq_site_filtered_list[[site]] <- physeq_site_filtered
+}
+
+# --- 3. Run Analysis on the independently filtered data ---
+
+# Vaginal
+physeq_vag <- physeq_site_filtered_list[["Vaginal"]]
+if (!is.null(physeq_vag) && nsamples(physeq_vag) > 0 && ntaxa(physeq_vag) > 0) {
+    prev_vag <- calc_prevalence_counts(physeq_vag)
+    final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+    final_vag <- final_vag[order(final_vag$P_value), ]
+    table_vag <- format_table(final_vag)
+    # Updated filename to reflect the new prevalence range
+    write.csv(table_vag, "P16S/results/prev/white_site_filtered_prev_20-40_Vaginal.csv", row.names = FALSE)
+    cat("\nResults for Vaginal:\n")
+    print(table_vag)
+} else {
+    cat("\nNo data left for Vaginal site after filtering.\n")
+}
+
+# MomTongue
+physeq_mom <- physeq_site_filtered_list[["MomTongue"]]
+if (!is.null(physeq_mom) && nsamples(physeq_mom) > 0 && ntaxa(physeq_mom) > 0) {
+    prev_mom <- calc_prevalence_counts(physeq_mom)
+    final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+    final_mom <- final_mom[order(final_mom$P_value), ]
+    table_mom <- format_table(final_mom)
+    # Updated filename to reflect the new prevalence range
+    write.csv(table_mom, "P16S/results/prev/white_site_filtered_prev_20-40_MomTongue.csv", row.names = FALSE)
+    cat("\nResults for MomTongue:\n")
+    print(table_mom)
+} else {
+    cat("\nNo data left for MomTongue site after filtering.\n")
+}
+```
+
+# Among Hispanics: Core taxa prevalences (taxa with > 40% of prevalence) for oral and vaginal
+
+```{r}
+# --- 1. Pre-analysis Functions ---
+# NOTA: Las funciones de cálculo (calc_prevalence_counts, etc.) y formato no cambian.
+# Eliminamos la función 'filter_taxa_by_prevalence_and_abundance' porque ahora lo haremos de otra forma.
+
+# [Aquí irían las funciones calc_prevalence_counts, calc_differences_pvalues y format_table
+# ...son las mismas que en tu script, puedes copiarlas y pegarlas aquí]
+
+# --- 2. Analysis Workflow ---
+
+# Load your initial phyloseq object
+physeq_raw <- PHYrar_alpha_ggext_subset02_newseqs
+physeq_raw <- subset_samples(physeq_raw,   ethnicity == "Hispanic/Latina")
+# Agglomerate at Genus level BEFORE filtering
+# This is better as prevalence at the genus level is more stable
+physeq_genus_raw <- tax_glom(physeq_raw, taxrank = "Genus", NArm = FALSE)
+
+# --- Define filtering criteria ---
+PREVALENCE_THRESHOLD <- 0.40 # 40% prevalence within the body site
+ABUNDANCE_THRESHOLD <- 0.00  # 
+
+# --- Create a list to store filtered data for each site ---
+physeq_site_filtered_list <- list()
+
+# Get all unique body sites from your data
+body_sites <- unique(as.character(sample_data(physeq_genus_raw)$body_site))
+
+# --- Loop through each body site to filter it independently ---
+for (site in body_sites) {
+  cat(paste("\n--- Filtering site:", site, "---\n"))
+
+  # 1. Subset the data for the current site
+  physeq_subset <- subset_samples(physeq_genus_raw, body_site == site)
+
+  # 2. Apply prevalence filter ON THIS SUBSET
+  # This creates a logical vector: TRUE for taxa to keep, FALSE for taxa to discard.
+  prev_filter <- genefilter_sample(physeq_subset, filterfun_sample(function(x) x > 0), A = PREVALENCE_THRESHOLD * nsamples(physeq_subset))
+
+  # --- FIX IS HERE ---
+  # Use the 'prev_filter' variable that you just calculated.
+  taxa_to_keep <- prev_filter
+
+  # 3. Prune taxa for the current site
+  physeq_site_filtered <- prune_taxa(taxa_to_keep, physeq_subset)
+
+  cat(paste("Original taxa in this site:", ntaxa(physeq_subset), "\n"))
+  cat(paste("Taxa remaining after filtering:", ntaxa(physeq_site_filtered), "\n"))
+
+  # Store the filtered phyloseq object in the list
+  physeq_site_filtered_list[[site]] <- physeq_site_filtered
+}
+
+# El resto del script para analizar y escribir los resultados es correcto...
+# --- 3. Run Analysis on the independently filtered data ---
+# (Vaginal, MomTongue, etc.)
+
+
+# --- 3. Run Analysis on the independently filtered data ---
+
+# Vaginal
+physeq_vag <- physeq_site_filtered_list[["Vaginal"]]
+if (!is.null(physeq_vag) && nsamples(physeq_vag) > 0 && ntaxa(physeq_vag) > 0) {
+    prev_vag <- calc_prevalence_counts(physeq_vag)
+    final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_vag)
+    final_vag <- final_vag[order(final_vag$P_value), ]
+    table_vag <- format_table(final_vag)
+    write.csv(table_vag, "P16S/results/prev/hispa_site_filtered_prev_40_Vaginal.csv", row.names = FALSE)
+    cat("\nResults for Vaginal:\n")
+    print(table_vag)
+} else {
+    cat("\nNo data left for Vaginal site after filtering.\n")
+}
+
+# MomTongue
+physeq_mom <- physeq_site_filtered_list[["MomTongue"]]
+if (!is.null(physeq_mom) && nsamples(physeq_mom) > 0 && ntaxa(physeq_mom) > 0) {
+    prev_mom <- calc_prevalence_counts(physeq_mom)
+    final_mom <- calc_differences_pvalues(prev_mom, "PE", "Control", physeq_mom)
+    final_mom <- final_mom[order(final_mom$P_value), ]
+    table_mom <- format_table(final_mom)
+    write.csv(table_mom, "P16S/results/prev/hispa_site_filtered_prev_40_MomTongue.csv", row.names = FALSE)
+    cat("\nResults for MomTongue:\n")
+    print(table_mom)
+} else {
+    cat("\nNo data left for MomTongue site after filtering.\n")
+}
+
+```

@@ -1,0 +1,1183 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/")) 
+    
+```
+
+#LOAD
+Alpha and beta diversity stratified by ethnicity
+```{r setup}
+# Cargar las librerías necesarias
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggprism)
+library(MASS)
+library(vegan)
+
+# Cargar los datos
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/R/phy_objects/PHYrar_alpha_ggext_subset02_newseqs.RData")
+```
+
+# Alpha VAGINAL HISPANICS
+Función para correr alpha
+Hay que descomentar la paleta de colores que se requiere segun la variable de interes
+VAGINAL
+como son tan pocas muestras elimine inclusi el BMI para ajustar
+ojo:
+Todos las metricas son normales 
+```{r}
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+#phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+
+phy= subset_samples(phy, body_site=="Vaginal")
+
+#phy= subset_samples(phy, met$severe_3cat!= "control")
+
+#para que la comparacion sea entre 6 negras y 6 hispanas con el misno munero de controles y preclampsias (n=3) se elimianna al azar estas dos muestras
+phy 
+  
+
+met <- data.frame(sample_data(phy))
+table(met$ethnicity, met$race)
+shapiro.test(met$shannon)
+shapiro.test(log(met$observed)) #para vaginal 
+shapiro.test(met$simpson)
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+    met1 <- met %>%
+    dplyr::select(study_id, observed, shannon, simpson, bmi , antibiotics_during_pregnancy,!!sym(variable_interes)) %>%
+    drop_na()
+  print(colnames(met1))
+summary(met1$bmi)
+  # Crear fórmulas dinámicas
+  formula_sha <- as.formula(paste("shannon ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_obs <- as.formula(paste("log(observed) ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_simp <- as.formula(paste("simpson ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+
+  print(formula_sha)
+print(formula_obs)
+print(formula_simp)
+
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+ #  palette <- c("Not Hispanic/Latina" = "#666666", "Hispanic/Latina" = "#CC3300")
+
+  #palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon, simpson, observed)
+  
+# Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Vaginal Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+  theme(axis.text.x = element_text(size = 14, angle = 45, hjust = 1),  # Rotar etiquetas del eje X
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual)),"/vaginal", recursive = TRUE)
+  
+  # Guardar el gráfico en PDF
+  ggsave(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/vaginal/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/vaginal/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/vaginal/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/vaginal/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Llamar a la función para generar el gráfico y ajustar los modelos
+#generar_grafico("study_group")
+generar_grafico("severe")
+#generar_grafico("ethnicity")
+
+```
+
+
+# Alpha ORAL HISPANICS
+Simpson not normal for severity or study_grouop
+```{r}
+
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+
+phy= subset_samples(phy, body_site=="MomTongue")
+
+phy= subset_samples(phy, met$severe_3cat!= "control")
+
+#para que la comparacion sea entre 6 negras y 6 hispanas con el misno munero de controles y preclampsias (n=3) se elimianna al azar estas dos muestras
+phy 
+  
+
+met <- data.frame(sample_data(phy))
+
+shapiro.test(met$shannon)
+shapiro.test(log(met$simpson))
+shapiro.test(met$simpson)
+shapiro.test(met$observed)
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+    met1 <- met %>%
+    dplyr::select(study_id, observed, shannon, simpson, bmi , antibiotics_during_pregnancy,!!sym(variable_interes)) %>%
+    drop_na()
+  print(colnames(met1))
+summary(met1$bmi)
+  # Crear fórmulas dinámicas
+  formula_sha <- as.formula(paste("shannon ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_obs <- as.formula(paste("observed ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_simp <- as.formula(paste("simpson ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+
+  print(formula_sha)
+print(formula_obs)
+print(formula_simp)
+
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+ #  palette <- c("Not Hispanic/Latina" = "#666666", "Hispanic/Latina" = "#CC3300")
+
+  #palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon, simpson, observed)
+  
+# Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Oral Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+  theme(axis.text.x = element_text(size = 14, angle = 45, hjust = 1),  # Rotar etiquetas del eje X
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual)),"/oral", recursive = TRUE)
+  
+  # Guardar el gráfico en PDF
+  ggsave(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/oral/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/oral/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/oral/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/Hispanics_by_pree/", as.character(fecha_actual), "/oral/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Llamar a la función para generar el gráfico y ajustar los modelos
+#generar_grafico("study_group")
+generar_grafico("severe")
+#generar_grafico("ethnicity")
+```
+
+#Alpha vaginal WHITES
+shannon is not normally distributed!
+
+```{r}
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+phy <- subset_samples(
+  phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+phy= subset_samples(phy, body_site=="Vaginal")
+
+phy= subset_samples(phy, met$severe_3cat!= "control")
+
+#para que la comparacion sea entre 6 negras y 6 hispanas con el misno munero de controles y preclampsias (n=3) se elimianna al azar estas dos muestras
+phy 
+  
+
+met <- data.frame(sample_data(phy))
+
+#shapiro.test(log(met$shannon))
+shapiro.test(met$simpson)
+shapiro.test(log(met$observed)) #para vaginal 
+shapiro.test(met$observed)
+
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+    met1 <- met %>%
+    dplyr::select(study_id, observed, shannon, simpson, bmi , antibiotics_during_pregnancy,!!sym(variable_interes)) %>%
+    drop_na()
+  print(colnames(met1))
+summary(met1$bmi)
+  # Crear fórmulas dinámicas
+  formula_sha <- as.formula(paste("shannon ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_obs <- as.formula(paste("log(observed) ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_simp <- as.formula(paste("simpson ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+
+  print(formula_sha)
+print(formula_obs)
+print(formula_simp)
+
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+ #  palette <- c("Not Hispanic/Latina" = "#666666", "Hispanic/Latina" = "#CC3300")
+
+  #palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon, simpson, observed)
+  
+# Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Vaginal Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+  theme(axis.text.x = element_text(size = 14, angle = 45, hjust = 1),  # Rotar etiquetas del eje X
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual)),"/vaginal", recursive = TRUE)
+  
+  # Guardar el gráfico en PDF
+  ggsave(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/vaginal/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/vaginal/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/vaginal/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/vaginal/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Llamar a la función para generar el gráfico y ajustar los modelos
+#generar_grafico("study_group")
+generar_grafico("severe")
+#generar_grafico("ethnicity")
+
+```
+
+# Alpha Oral WHITE
+simpson is not normally distributed!
+
+```{r}
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+
+phy <- subset_samples(
+  phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+phy= subset_samples(phy, body_site=="MomTongue")
+
+phy= subset_samples(phy, met$severe_3cat!= "control")
+
+#para que la comparacion sea entre 6 negras y 6 hispanas con el misno munero de controles y preclampsias (n=3) se elimianna al azar estas dos muestras
+phy 
+  
+
+met <- data.frame(sample_data(phy))
+
+shapiro.test(met$shannon)
+shapiro.test(log(met$simpson))
+shapiro.test(met$simpson)
+shapiro.test(met$observed)
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+    met1 <- met %>%
+    dplyr::select(study_id, observed, shannon, simpson, bmi , antibiotics_during_pregnancy,!!sym(variable_interes)) %>%
+    drop_na()
+  print(colnames(met1))
+summary(met1$bmi)
+  # Crear fórmulas dinámicas
+  formula_sha <- as.formula(paste("shannon ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_obs <- as.formula(paste("observed ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+  formula_simp <- as.formula(paste("simpson ~", variable_interes, "+ bmi + antibiotics_during_pregnancy"))
+
+  print(formula_sha)
+print(formula_obs)
+print(formula_simp)
+
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+ #  palette <- c("Not Hispanic/Latina" = "#666666", "Hispanic/Latina" = "#CC3300")
+
+  #palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon, simpson, observed)
+  
+# Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Oral Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+  theme(axis.text.x = element_text(size = 14, angle = 45, hjust = 1),  # Rotar etiquetas del eje X
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual)),"/oral", recursive = TRUE)
+  
+  # Guardar el gráfico en PDF
+  ggsave(paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/oral/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/oral/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/oral/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/alpha/White_by_pree/", as.character(fecha_actual), "/oral/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Llamar a la función para generar el gráfico y ajustar los modelos
+#generar_grafico("study_group")
+generar_grafico("severe")
+#generar_grafico("ethnicity")
+```
+
+#PERMANOVA - stratified by ethnicity
+
+```{r}
+
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+
+# Filtrado por sitio corporal
+phy = subset_samples(phy, body_site == "Vaginal")
+bs = "vaginal"
+#phy= subset_samples(phy, severe_3cat!= "control")
+# phy = subset_samples(phy, body_site == "MomTongue")
+# bs = "oral"
+
+# Filtrado por etnicidad y raza
+phy_hispanic <- subset_samples(phy, ethnicity == "Hispanic/Latina")
+
+phy_white <- subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+#remove outlayers! samples study_id== "401" and "494" para phy_white
+#phy_white <- subset_samples(phy_white, study_id != "401")
+#phy_white <- subset_samples(phy_white, study_id != "494")
+
+analyze_phy <- function(phy, label) {
+  met <- data.frame(sample_data(phy))
+  phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+  # Métrica de distancia
+  # dist_metrics = c("bray")
+  # metric_names = c("bray")
+  
+  dist_metrics = c("jaccard")
+  metric_names = c("jaccard")
+
+  group = "study_group"
+#  group = "severe_3cat"
+  
+
+
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+   #   palette <- c("No" = "orange", "Yes" = "#CC3300")
+
+
+  met1 <- met %>%
+    dplyr::select(bmi, study_group, ethnicity, antibiotics_during_pregnancy, study_id) %>% 
+    drop_na()
+
+  lista <- list()
+
+  for (i in 1:length(dist_metrics)) {
+    binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+    dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+    samples <- row.names(met1)
+    dist_matrix <- as.matrix(dist)
+    common_samples <- intersect(samples, rownames(dist_matrix))
+
+    if (length(common_samples) == 0) {
+      stop("No hay muestras en común entre 'met1' y la matriz de distancia.")
+    }
+
+    dist_new <- dist_matrix[common_samples, common_samples]
+    only_dist <- dist_new
+    met1_subset <- met1[common_samples, ]
+
+    set.seed(711)
+    mod_adonis <- adonis2(only_dist ~ ., data = met1_subset[, c(group, "bmi", "antibiotics_during_pregnancy")], permutations = 999, by = "margin")
+    a1 <- as.data.frame(mod_adonis)
+    a1$metric <- metric_names[i]
+    lista[[i]] <- a1
+
+    set.seed(711)
+    mds <- metaMDS(only_dist, trymax = 50)
+    mds_scores <- as.data.frame(scores(mds))
+    mds_scores$sample_id <- row.names(mds_scores)
+    mds_data <- merge(mds_scores, met1_subset, by.x = "sample_id", by.y = "row.names")
+
+    po <- ggplot(mds_data, aes_string(x = "NMDS1", y = "NMDS2", color = group)) + 
+      geom_point(size = 3, alpha = 0.9, position = position_jitter(width = 0.01, height = 0.01)) +
+      stat_ellipse(aes_string(group = group), type = "t", level = 0.95, linetype = 1, size = 1, alpha = 0.5) +
+      geom_text(aes(label = study_id), vjust = -0.5, hjust = 0.5, size = 3) +  
+      theme_bw() +
+      labs(title = paste(bs, label, ": NMDS Ordination by", group, metric_names[i]),
+           x = "NMDS1", y = "NMDS2") +
+      theme(legend.position = "bottom") +
+      scale_color_manual(values = palette)
+
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    dir.create(file.path("results/beta", label, today, bs, group), showWarnings = FALSE, recursive = TRUE)
+    file_name <- paste0("NMDS_", dist_metrics[i], "_var_by_", group, "3.pdf")
+    ggsave(file.path("results/beta", label, today, bs, group, file_name), plot = po, width = 6.5, height = 6)
+  }
+
+  tabla_adonis <- do.call("rbind", lista)
+  write.csv(tabla_adonis, file = file.path("results/beta", label, today, bs, group, paste0(metric_names[i], "_adonis_", group, "3.csv")), row.names = TRUE)
+  print(tabla_adonis)
+  print(po)
+}
+
+# Ejecutar análisis para cada grupo
+analyze_phy(phy_hispanic, "Hispanics_by_pree")
+analyze_phy(phy_white, "Whites_by_pree")
+
+
+```
+
+
+#BetaDispers - stratified by ethnicity
+this script works although it do not save the output
+```{r}
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+
+analyze_phy <- function(phy, bs, dist_metrics, label) {
+  met <- data.frame(sample_data(phy))
+  phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+  metric_names <- dist_metrics
+  group <- "study_group"
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+  met1 <- met %>%
+    dplyr::select(bmi, study_group, antibiotics_during_pregnancy, study_id) %>% 
+    drop_na()
+
+  lista <- list()
+
+  for (i in 1:length(dist_metrics)) {
+    binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+    dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+
+    samples <- row.names(met1)
+    dist_matrix <- as.matrix(dist)
+    common_samples <- intersect(samples, rownames(dist_matrix))
+
+    if (length(common_samples) == 0) {
+      stop("No common samples between 'met1' and distance matrix.")
+    }
+
+    dist_new <- dist_matrix[common_samples, common_samples]
+    only_dist <- as.dist(dist_new)
+    met1_subset <- met1[common_samples, ]
+
+    # Perform betadisper
+    betadisper_model <- betadisper(only_dist, met1_subset[[group]])
+    betadisper_test <- permutest(betadisper_model, permutations = 999)
+
+    # Extract relevant statistics
+    results_df <- data.frame(
+      Group = names(betadisper_test$tab)[1],
+      Df = betadisper_test$tab[1, "Df"],
+      Sum_Sq = betadisper_test$tab[1, "Sum Sq"],
+      Mean_Sq = betadisper_test$tab[1, "Mean Sq"],
+      F_value = betadisper_test$tab[1, "F"],
+      P_value = betadisper_test$tab[1, "Pr(>F)"]
+    )
+
+    lista[[i]] <- results_df
+
+    # Boxplot of distances
+    boxplot_data <- data.frame(Distance = betadisper_model$distances,
+                               Group = met1_subset[[group]])
+
+    po <- ggplot(boxplot_data, aes(x = Group, y = Distance, fill = Group)) +
+      geom_boxplot(alpha = 0.7) +
+      geom_jitter(shape = 16, position = position_jitter(0.2), size = 2, alpha = 0.7) +
+      theme_bw() +
+      labs(title = paste("Beta Dispersion Distances by", group, "-", metric_names[i], "-", bs),
+           x = group,
+           y = "Distance to Centroid") +
+      theme(legend.position = "none") +
+      scale_fill_manual(values = palette)
+
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    dir.create(file.path("results/beta", label, today, bs, group), showWarnings = FALSE, recursive = TRUE)
+
+    file_name <- paste0("Boxplot_", dist_metrics[i], "_by_", group, "_distances.pdf")
+    ggsave(file.path("results/beta", label, today, bs, group, file_name), plot = po, width = 6.5, height = 6)
+  }
+
+  tabla_betadisper <- do.call("rbind", lista)
+  write.csv(tabla_betadisper, file = file.path("results/beta", label, today, bs, group, paste0(metric_names[i], "_betadisper_", group, "2.csv")), row.names = FALSE)
+  print(tabla_betadisper)
+  print(po)
+}
+
+# Ejecutar análisis para cada grupo y sitio corporal
+for (site in c("Vaginal", "MomTongue")) {
+  bs <- ifelse(site == "Vaginal", "vaginal", "oral")
+  phy_site <- subset_samples(PHYrar_alpha_ggext_subset02_newseqs, body_site == site)
+
+  phy_hispanic <- subset_samples(phy_site, ethnicity == "Hispanic/Latina")
+  phy_white <- subset_samples(phy_site, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+  for (dist_metric in c("bray", "jaccard")) {
+    analyze_phy(phy_hispanic, bs, dist_metric, "Hispanics_by_pree")
+    analyze_phy(phy_white, bs, dist_metric, "Whites_by_pree")
+  }
+}
+
+```
+
+#PERMANOVA - severity - stratified by ethnicity
+```{r}
+
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+
+# Filtrado por sitio corporal
+# phy = subset_samples(phy, body_site == "Vaginal")
+# bs = "vaginal"
+phy= subset_samples(phy, severe_3cat!= "control")
+phy = subset_samples(phy, body_site == "MomTongue")
+bs = "oral"
+
+# Filtrado por etnicidad y raza
+phy_hispanic <- subset_samples(phy, ethnicity == "Hispanic/Latina")
+
+phy_white <- subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+#remove outlayers! samples study_id== "401" and "494" para phy_white
+phy_white <- subset_samples(phy_white, study_id != "401")
+phy_white <- subset_samples(phy_white, study_id != "494")
+
+analyze_phy <- function(phy, label) {
+  met <- data.frame(sample_data(phy))
+  phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+  # Métrica de distancia
+  dist_metrics = c("bray")
+  metric_names = c("bray")
+  
+  # dist_metrics = c("jaccard")
+  # metric_names = c("jaccard")
+  
+#  group = "study_group"
+  group = "severe"
+  
+
+
+ # palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+     palette <- c("No" = "orange", "Yes" = "#CC3300")
+
+
+  met1 <- met %>%
+    dplyr::select(bmi, study_group, ethnicity, 
+                  severe,
+                  antibiotics_during_pregnancy, study_id) %>% 
+    drop_na()
+
+  lista <- list()
+
+  for (i in 1:length(dist_metrics)) {
+    binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+    dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+    samples <- row.names(met1)
+    dist_matrix <- as.matrix(dist)
+    common_samples <- intersect(samples, rownames(dist_matrix))
+
+    if (length(common_samples) == 0) {
+      stop("No hay muestras en común entre 'met1' y la matriz de distancia.")
+    }
+
+    dist_new <- dist_matrix[common_samples, common_samples]
+    only_dist <- dist_new
+    met1_subset <- met1[common_samples, ]
+
+    set.seed(711)
+    mod_adonis <- adonis2(only_dist ~ ., data = met1_subset[, c(group, "bmi", "antibiotics_during_pregnancy")], permutations = 999, by = "margin")
+    a1 <- as.data.frame(mod_adonis)
+    a1$metric <- metric_names[i]
+    lista[[i]] <- a1
+
+    set.seed(711)
+    mds <- metaMDS(only_dist, trymax = 50)
+    mds_scores <- as.data.frame(scores(mds))
+    mds_scores$sample_id <- row.names(mds_scores)
+    mds_data <- merge(mds_scores, met1_subset, by.x = "sample_id", by.y = "row.names")
+
+    po <- ggplot(mds_data, aes_string(x = "NMDS1", y = "NMDS2", color = group)) + 
+      geom_point(size = 3, alpha = 0.9, position = position_jitter(width = 0.01, height = 0.01)) +
+      stat_ellipse(aes_string(group = group), type = "t", level = 0.95, linetype = 1, size = 1, alpha = 0.5) +
+      geom_text(aes(label = study_id), vjust = -0.5, hjust = 0.5, size = 3) +  
+      theme_bw() +
+      labs(title = paste(bs, label, ": NMDS Ordination by", group, metric_names[i]),
+           x = "NMDS1", y = "NMDS2") +
+      theme(legend.position = "bottom") +
+      scale_color_manual(values = palette)
+
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    dir.create(file.path("results/beta", label, today, bs, group), showWarnings = FALSE, recursive = TRUE)
+    file_name <- paste0("NMDS_", dist_metrics[i], "_var_by_", group, "3.pdf")
+    ggsave(file.path("results/beta", label, today, bs, group, file_name), plot = po, width = 6.5, height = 6)
+  }
+
+  tabla_adonis <- do.call("rbind", lista)
+  write.csv(tabla_adonis, file = file.path("results/beta", label, today, bs, group, paste0(metric_names[i], "_adonis_", group, "3.csv")), row.names = TRUE)
+  print(tabla_adonis)
+  print(po)
+}
+
+# Ejecutar análisis para cada grupo
+analyze_phy(phy_hispanic, "Hispanics_by_pree")
+analyze_phy(phy_white, "Whites_by_pree")
+
+
+
+```
+# BetaDispers - severity - stratified by ethnicity
+this script works although it do not save the output
+```{r}
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+phy= subset_samples(phy, severe_3cat!= "control")
+
+analyze_phy <- function(phy, bs, dist_metrics, label) {
+  met <- data.frame(sample_data(phy))
+  phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+  metric_names <- dist_metrics
+  group <- "severe"
+     palette <- c("No" = "orange", "Yes" = "#CC3300")
+
+  met1 <- met %>%
+    dplyr::select(bmi, severe, antibiotics_during_pregnancy, study_id) %>% 
+    drop_na()
+
+  lista <- list()
+
+  for (i in 1:length(dist_metrics)) {
+    binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+    dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+
+    samples <- row.names(met1)
+    dist_matrix <- as.matrix(dist)
+    common_samples <- intersect(samples, rownames(dist_matrix))
+
+    if (length(common_samples) == 0) {
+      stop("No common samples between 'met1' and distance matrix.")
+    }
+
+    dist_new <- dist_matrix[common_samples, common_samples]
+    only_dist <- as.dist(dist_new)
+    met1_subset <- met1[common_samples, ]
+
+    # Perform betadisper
+    betadisper_model <- betadisper(only_dist, met1_subset[[group]])
+    betadisper_test <- permutest(betadisper_model, permutations = 999)
+
+    # Extract relevant statistics
+    results_df <- data.frame(
+      Group = names(betadisper_test$tab)[1],
+      Df = betadisper_test$tab[1, "Df"],
+      Sum_Sq = betadisper_test$tab[1, "Sum Sq"],
+      Mean_Sq = betadisper_test$tab[1, "Mean Sq"],
+      F_value = betadisper_test$tab[1, "F"],
+      P_value = betadisper_test$tab[1, "Pr(>F)"]
+    )
+
+    lista[[i]] <- results_df
+
+    # Boxplot of distances
+    boxplot_data <- data.frame(Distance = betadisper_model$distances,
+                               Group = met1_subset[[group]])
+
+    po <- ggplot(boxplot_data, aes(x = Group, y = Distance, fill = Group)) +
+      geom_boxplot(alpha = 0.7) +
+      geom_jitter(shape = 16, position = position_jitter(0.2), size = 2, alpha = 0.7) +
+      theme_bw() +
+      labs(title = paste("Beta Dispersion Distances by", group, "-", metric_names[i], "-", bs),
+           x = group,
+           y = "Distance to Centroid") +
+      theme(legend.position = "none") +
+      scale_fill_manual(values = palette)
+
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    dir.create(file.path("results/beta", label, today, bs, group), showWarnings = FALSE, recursive = TRUE)
+
+    file_name <- paste0("Boxplot_", dist_metrics[i], "_by_", group, "_distances.pdf")
+    ggsave(file.path("results/beta", label, today, bs, group, file_name), plot = po, width = 6.5, height = 6)
+  }
+
+  tabla_betadisper <- do.call("rbind", lista)
+  write.csv(tabla_betadisper, file = file.path("results/beta", label, today, bs, group, paste0(metric_names[i], "_betadisper_", group, "2.csv")), row.names = FALSE)
+  print(tabla_betadisper)
+  print(po)
+}
+
+# Ejecutar análisis para cada grupo y sitio corporal
+for (site in c("Vaginal", "MomTongue")) {
+  bs <- ifelse(site == "Vaginal", "vaginal", "oral")
+  phy_site <- subset_samples(PHYrar_alpha_ggext_subset02_newseqs, body_site == site)
+
+  phy_hispanic <- subset_samples(phy_site, ethnicity == "Hispanic/Latina")
+  phy_white <- subset_samples(phy_site, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+  for (dist_metric in c("bray", "jaccard")) {
+    analyze_phy(phy_hispanic, bs, dist_metric, "Hispanics_by_pree")
+    analyze_phy(phy_white, bs, dist_metric, "Whites_by_pree")
+  }
+}
+
+
+```
+
+#Maaslin
+
+```{r}
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+
+phy<-PHYrar_alpha
+
+  #phy= subset_samples(phy, body_site=="Vaginal")
+  bs="vaginal"
+ phy= subset_samples(phy, body_site=="Vaginal")
+ #bs="oral"
+
+#phy <- subset_samples(phy, race == "Black/African American/African" | ethnicity == "Hispanic/Latina")
+
+
+met <- data.frame(sample_data(phy))
+
+
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+met=sample_data(phy)
+#phy <- tax_glom(phy, taxrank = "Species")
+phy <- tax_glom(phy, taxrank = "Genus")
+
+# Ver la tabla de taxonomía
+taax <- tax_table(phy)
+dim(taax)
+
+# No estás agregando a nivel de especie, por lo que esta línea se puede mantener sin tax_glom
+phy_species <- phy
+
+# Ver la nueva tabla de taxonomía después de posible manipulación
+taax1 <- tax_table(phy_species)
+dim(taax1)
+
+# Transformar las cuentas a porcentajes para normalizar
+
+phy_prop <- transform_sample_counts(phy_species, function(x) x / sum(x) * 100)
+
+# # Filtrar por prevalencia (>20% de las muestras)
+ perc_samples <- 0.20
+ phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+
+
+phy_fil<-phy_prop
+# Filtrar por abundancia (>1%)
+abundance_threshold <- 1 # 1% de abundancia
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+
+# Ver el número de ASVs después del filtrado
+phy_fil
+
+
+taax=tax_table(phy_fil)
+dim(taax)
+# Ensure unique taxa names
+#species_names <- make.unique(tax_table(phy_fil)[, "Species"])
+species_names <- make.unique(tax_table(phy_fil)[, "Genus"])
+
+taxa_names(phy_fil) <- species_names
+
+length(species_names)
+
+
+# Extract OTU table, sample metadata, and taxonomy table
+otu_table <- as.data.frame(otu_table(phy_fil))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+taxonomy <- as.data.frame(tax_table(phy_fil))
+otu_table <- t(otu_table)
+
+
+# Define the output directory
+# Obtener la fecha actual
+today <- Sys.Date()
+
+# Crear una carpeta con la fecha actual
+output_dir <- paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/results/maaslin2/Hispanics_by_pree/",today,"/vag_gen_study_group_20prev_sig0_25_ab1per" )
+dir.create(output_dir, recursive = TRUE)
+
+
+# Define the fixed effects (covariates)
+
+# fixed_effects <- c("ethnicity")
+#fixed_effects <- c("study_group")
+fixed_effects <- c("study_group", "BMI", "antibiotics_during_pregnancy", "ethnicity")
+
+#fixed_effects <- c("severe")
+
+#install.packages("Maaslin2")
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+  fixed_effects = fixed_effects,
+  random_effects = NULL,
+  normalization = "TSS" ,
+  max_significance= 0.50,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  #min_abundance = 0.10,
+  min_prevalence = 0
+)
+
+
+
+```
+#all taxanomic levels
+
+```{r}
+library(phyloseq)
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+library(ggplot2)
+
+# Set working directory
+# Load phyloseq object
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/R/phy_objects/PHYrar_alpha_ggext_subset02_newseqs.RData")
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+
+# phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+phy <- subset_samples( phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+#phy= subset_samples(phy, severe_3cat!="control")
+
+# Filter samples
+# phy <- subset_samples(phy, body_site == "MomTongue")
+# bs="oral"
+# phy <- subset_samples(phy, study_id != "401")
+# # 
+phy <- subset_samples(phy, body_site == "Vaginal")
+bs="vag"
+
+# Define taxonomic levels to analyze
+tax_levels <- c("Species", "Genus", "Family", "Class", "Order", "Phylum")
+
+# Date for output folder
+today <- Sys.Date()
+
+# Process ASV level (no taxonomic agglomeration)
+cat("Processing ASV\n")
+phy_level <- phy
+phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+perc_samples <- 0.20
+phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+abundance_threshold <- 15
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+taxa_names(phy_fil) <- make.unique(taxa_names(phy_fil))
+
+# Extract OTU table, metadata, and taxonomy
+otu_table <- as.data.frame(t(otu_table(phy_fil)))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+# Define output directory
+output_dir <- paste0("results/maaslin/", today, "/study_group/", bs, "/ASV_study_group_20prev_sig0_25_ab15per")
+dir.create(output_dir, recursive = TRUE)
+
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+  #fixed_effects = c("study_group", "bmi", "antibiotics_during_pregnancy", "ethnicity"),
+          fixed_effects = c("study_group", "bmi", "antibiotics_during_pregnancy"),
+
+           # fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy"),
+
+         # fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy","ethnicity"),
+
+#    fixed_effects = c("study_group"),
+  random_effects = NULL,
+  normalization = "TSS",
+  max_significance = 0.25,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  min_abundance = 0,
+  min_prevalence = 0
+)
+
+for (tax_level in tax_levels) {
+  cat("Processing", tax_level, "\n")
+  
+  # Aggregate data if necessary
+  phy_level <- tax_glom(phy, taxrank = tax_level)
+  
+  # Transform to relative abundance
+  phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence and abundance
+  phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+  
+  # Ensure unique taxa names
+  taxa_names(phy_fil) <- make.unique(tax_table(phy_fil)[, tax_level])
+  
+  # Extract OTU table, metadata, and taxonomy
+  otu_table <- as.data.frame(t(otu_table(phy_fil)))
+  sample_metadata <- as(sample_data(phy_fil), "data.frame")
+  
+  # Define output directory
+  output_dir <- paste0("results/maaslin/", today, "/study_group/", bs, "/", tax_level, "_study_group_20prev_sig0_25_ab15per")
+  dir.create(output_dir, recursive = TRUE)
+  
+  # Run MaAsLin2
+  fit_data <- Maaslin2(
+    input_data = otu_table, 
+    input_metadata = sample_metadata, 
+    output = output_dir,
+  #  fixed_effects = c("study_group","bmi", "antibiotics_during_pregnancy", "ethnicity"),
+          fixed_effects = c("study_group", "bmi", "antibiotics_during_pregnancy"),
+            #fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy","ethnicity"),
+
+#fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy"),
+   #     fixed_effects = c("study_group"),
+
+    random_effects = NULL,
+    normalization = "TSS",
+    max_significance = 0.25,
+    transform = "LOG", 
+    analysis_method = "LM", 
+    correction = "BH", 
+    standardize = TRUE,
+    min_abundance = 0,
+    min_prevalence = 0
+  )
+  
+  # Load results
+  results_file <- paste0(output_dir, "/all_results.tsv")
+  if (file.exists(results_file)) {
+    maaslin_results <- read.table(results_file, header = TRUE, sep = "\t")
+    
+    # Filter significant results
+    #significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+        significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'severe' & value == 'Yes')
+
+    significant_results <- significant_results[order(significant_results$coef, decreasing = TRUE), ]
+    significant_results$feature <- factor(significant_results$feature, levels = significant_results$feature)
+    
+    # Create coefficient plot
+    p <- ggplot(significant_results, aes(x = feature, y = coef)) +
+      geom_point() +
+      geom_errorbar(aes(ymin = coef - stderr, ymax = coef + stderr), width = 0.2, color = "red") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+      labs(title = paste("Significant Coeff (", tax_level, " Study Group: PE, pval < 0.25)", sep = ""),
+           x = "Feature", y = "Coefficient") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    
+    # Save plot
+    output_plot <- paste0(output_dir, "/coef_plot_PE_study_group_significant_ordered.pdf")
+    ggsave(output_plot, plot = p, width = 6, height = 4)
+  }
+}
+
+cat("Analysis completed!\n")
+
+
+```
+#identifying ASV
+
+```{r}
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+
+# Asegurar que el ASV que buscas está en el objeto phyloseq
+asv_id <- "d891a80eccfa02001332b42560424f90"
+
+# Extraer la tabla de taxonomía
+tax_table_df <- as.data.frame(tax_table(phy))
+
+# Verificar si el ASV está presente en la tabla
+if (asv_id %in% rownames(tax_table_df)) {
+  # Extraer la información taxonómica del ASV
+  species_info <- tax_table_df[asv_id, ]
+  
+  # Mostrar el resultado
+  print(species_info)
+} else {
+  print("El ASV especificado no se encuentra en el objeto phyloseq.")
+}
+
+```

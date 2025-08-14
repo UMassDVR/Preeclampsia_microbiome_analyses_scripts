@@ -1,0 +1,4688 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_knit$set(root.dir = normalizePath("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/"))
+```
+
+
+# LOAD 
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(data.table)
+library(purrr)
+library(forcats)
+library(vegan)
+library(tidyverse)
+library(reshape2)
+library(emmeans)
+library(usedist)
+library(compositions)
+library(MASS)
+library(tableone)
+library(writexl)
+
+
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/phy_obj/PHY_fil_rar_alpha_meco.RData")
+
+
+```
+#table1
+```{r}
+# Load necessary libraries
+#extract metadata
+PHY_fil_rar_alpha_meco
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+wilcox.test(met$shannon~met$study_group)
+# Define variables
+variables <- c("mod","term_status", "gestational_age", "sex_of_baby", "baby_nicu", "baby_weight",
+               # "apgar_1", "apgar_5", 
+               "baby_temp_delivery", "ph_value", "days_stool1", "severe")
+
+# Create the table
+table_one <- CreateTableOne(vars = variables, 
+                          strata = "study_group", 
+                          data = met, 
+                          test = TRUE)
+
+
+  table1_df <- print(table_one, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, 
+                     showAllLevels = TRUE, includeNA = TRUE)
+  table1_df
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/tables_clean", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(table1_df, file = file.path(output_dir, "table1_80.csv"))
+
+
+#for severity#####################
+# Load necessary libraries
+#extract metadata
+
+#only select PE samples
+phy <- subset_samples(PHY_fil_rar_alpha_meco, study_group == "PE")
+met <- data.frame(sample_data(phy))
+
+# Define variables
+variables <- c("mod","term_status", "gestational_age", "sex_of_baby", "baby_nicu", "baby_weight",# "apgar_1", "apgar_5", 
+               "baby_temp_delivery", "ph_value", "days_stool1" )
+
+# Create the table
+table_one <- CreateTableOne(vars = variables, 
+                          strata = "severe", 
+                          data = met, 
+                          test = TRUE)
+
+
+  table1_df <- print(table_one, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, 
+                     showAllLevels = TRUE, includeNA = TRUE)
+  table1_df
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/tables_clean", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(table1_df, file = file.path(output_dir, "table1_80_severity.csv"))
+
+
+
+#3cat severity########
+#for severity#####################
+# Load necessary libraries
+#extract metadata
+
+#only select PE samples
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+# Define variables
+variables <- c("mod","term_status", "gestational_age", "sex_of_baby", "baby_nicu", "baby_weight",# "apgar_1", "apgar_5", 
+               "baby_temp_delivery", "ph_value", "days_stool1", "study_group")
+
+# Create the table
+table_one <- CreateTableOne(vars = variables, 
+                          strata = "severe_3cat", 
+                          data = met, 
+                          test = TRUE)
+
+
+  table1_df <- print(table_one, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, 
+                     showAllLevels = TRUE, includeNA = TRUE)
+  table1_df
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/tables_clean", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(table1_df, file = file.path(output_dir, "table1_80_severity_3cat.csv"))
+```
+# table 1 all babies
+
+```{r}
+# Load necessary libraries
+
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/R/phy_objects/PHYrar_alpha_ggext_subset02_newseqs.RData")
+
+phy= subset_samples(PHYrar_alpha_ggext_subset02_newseqs, body_site=="Vaginal")
+
+met <- data.frame(sample_data(phy))
+#filter only babies
+met <- met[met$sample_type == "baby", ]
+# Define variables
+variables <- c("mod","term_status", "gestational_age", "sex_of_baby", "baby_nicu", "baby_weight",
+               # "apgar_1", "apgar_5", 
+               "baby_temp_delivery", "ph_value", "days_stool1", "severe")
+
+# Create the table
+table_one <- CreateTableOne(vars = variables, 
+                          strata = "study_group", 
+                          data = met, 
+                          test = TRUE)
+
+
+  table1_df <- print(table_one, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, 
+                     showAllLevels = TRUE, includeNA = TRUE)
+  table1_df
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/tables_clean_all_babies", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(table1_df, file = file.path(output_dir, "table1_80.csv"))
+
+
+#for severity#####################
+# Load necessary libraries
+#extract metadata
+
+#only select PE samples
+phy <- subset_samples(PHY_fil_rar_alpha_meco, study_group == "PE")
+met <- data.frame(sample_data(phy))
+
+# Define variables
+variables <- c("mod","term_status", "gestational_age", "sex_of_baby", "baby_nicu", "baby_weight",# "apgar_1", "apgar_5", 
+               "baby_temp_delivery", "ph_value", "days_stool1" )
+
+# Create the table
+table_one <- CreateTableOne(vars = variables, 
+                          strata = "severe", 
+                          data = met, 
+                          test = TRUE)
+
+
+  table1_df <- print(table_one, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, 
+                     showAllLevels = TRUE, includeNA = TRUE)
+  table1_df
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/tables_clean_all_babies", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(table1_df, file = file.path(output_dir, "table1_severity.csv"))
+
+
+
+#3cat severity########
+#for severity#####################
+# Load necessary libraries
+#extract metadata
+
+#only select PE samples
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+# Define variables
+variables <- c("mod","term_status", "gestational_age", "sex_of_baby", "baby_nicu", "baby_weight",# "apgar_1", "apgar_5", 
+               "baby_temp_delivery", "ph_value", "days_stool1", "study_group")
+
+# Create the table
+table_one <- CreateTableOne(vars = variables, 
+                          strata = "severe_3cat", 
+                          data = met, 
+                          test = TRUE)
+
+
+  table1_df <- print(table_one, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, 
+                     showAllLevels = TRUE, includeNA = TRUE)
+  table1_df
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/tables_clean_all_babies", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(table1_df, file = file.path(output_dir, "table1_80_severity_3cat__all_babies.csv"))
+```
+
+#Colinealidad
+
+```{r}
+
+# Encode categorical variables numerically
+met$study_group_numeric <- as.numeric(as.factor(met$study_group))
+met$mod_numeric <- as.numeric(as.factor(met$mod))
+#remove na stool day
+met <- met[!is.na(met$days_stool1), ]
+# Calculate the correlation matrix
+cor_matrix <- cor(met[, c("study_group_numeric", "mod_numeric", "baby_weight", "days_stool1")], use = "complete.obs")
+
+# Print the correlation matrix
+print("Correlation matrix:")
+print(cor_matrix)
+
+
+library(car)
+
+# Fit a linear model to calculate VIF
+lm_model <- lm(study_group_numeric  ~  baby_weight+ mod_numeric + days_stool1, data = met)
+vif_values <- vif(lm_model)
+
+# Print VIF values
+print("Variance Inflation Factors (VIF):")
+print(vif_values)
+
+
+```
+
+
+
+
+#ALPHA RLM additive (testing var)
+(Rubust linear model)
+the distribution of the dependent variables are too squeezed to the left, and no log transformation fix it so we use robust linear model with is less sensitive to outliers
+
+Key findings:
+
+Baby weight shows significant negative association with Shannon diversity (p=0.0443)
+Study group (PE vs Control) does not show significant effects across any diversity measure
+Delivery mode (Vaginal vs Cesarean) shows no significant effects
+
+```{r}
+library(MASS)
+library(lubridate)
+
+PHY_fil_rar_alpha_meco
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+met$mod
+# Define the models using robust linear regression
+rlm_sha <- rlm(shannon ~ study_group + baby_weight + days_stool1+baby_nicu +ethnicity+mod, data = met)
+rlm_obs <- rlm(observed ~ study_group + baby_weight + days_stool1+baby_nicu+ethnicity+mod , data = met)
+rlm_simp <- rlm(simpson ~ study_group + baby_weight + days_stool1 +baby_nicu+ethnicity+mod, data = met)
+
+
+#shapiro
+shapiro.test(residuals(rlm_sha))
+shapiro.test(residuals(rlm_obs))
+shapiro.test(residuals(rlm_simp))
+# Function to calculate results for a model
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = names(t_vals),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for all three models
+sha_results <- calculate_model_results(rlm_sha, "Shannon")
+obs_results <- calculate_model_results(rlm_obs, "Observed Species")
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Combine all results and round numeric columns
+all_results <- rbind(sha_results, obs_results, simp_results)
+numeric_cols <- sapply(all_results, is.numeric)
+all_results[numeric_cols] <- round(all_results[numeric_cols], 4)
+
+# Print combined results
+print("Combined results for all diversity models:")
+print(all_results)
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(all_results, file = file.path(output_dir, "sg_bw_day_nicu_eth_mod.csv"))
+
+```
+# ALPHA RLM (final var)
+
+```{r}
+
+PHY_fil_rar_alpha_meco
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+met$observed
+# Define the models using robust linear regression
+rlm_sha <- rlm(shannon ~ study_group + baby_weight , data = met)
+rlm_obs <- rlm(observed ~ study_group + baby_weight  , data = met)
+rlm_simp <- rlm(simpson ~ study_group + baby_weight , data = met)
+
+
+#shapiro
+shapiro.test(residuals(rlm_sha))
+shapiro.test(residuals(rlm_obs))
+shapiro.test(residuals(rlm_simp))
+# Function to calculate results for a model
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = names(t_vals),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for all three models
+sha_results <- calculate_model_results(rlm_sha, "Shannon")
+obs_results <- calculate_model_results(rlm_obs, "Observed Species")
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Combine all results and round numeric columns
+all_results <- rbind(sha_results, obs_results, simp_results)
+numeric_cols <- sapply(all_results, is.numeric)
+all_results[numeric_cols] <- round(all_results[numeric_cols], 4)
+
+# Print combined results
+print("Combined results for all diversity models:")
+print(all_results)
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(all_results, file = file.path(output_dir, "sg_bw.csv"))
+
+
+library(ggplot2)
+
+# Create scatter plot for Shannon diversity
+p1 <- ggplot(met, aes(x = baby_weight, y = shannon, color = study_group)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = TRUE) +
+    theme_minimal() +
+  scale_color_manual(values = c("Control" = "#5a9bd4", "PE" = "#ff6347")) +
+    labs(title = "Shannon Diversity vs Baby weight (g)",
+         x = "Baby weight (g)",
+         y = "Shannon Diversity Index",
+         color = "Study Group")
+
+print(p1)
+# Save the plot as a PDF
+ggsave(filename = file.path(output_dir, "Shannon_vs_baby_weight.pdf"),
+       plot = p1, width = 6, height = 4)
+```
+
+# ALPHA RLM >2475g
+
+The model with the interaction (study_group * baby_weight) is not significative so better leave the additive model
+
+```{r}
+library(MASS)
+library(lubridate)
+PHY_fil_rar_alpha_meco
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+met %>% 
+dplyr::select(study_group,baby_weight) %>% 
+  arrange(baby_weight)
+
+# # Filter data for gestational age >= 37.57 weeks
+met %>%
+  dplyr::select(baby_weight, study_group) %>%
+  arrange(baby_weight)
+
+# filter 2475 or lower que es el peso mas bajo de controles
+met <- subset(met, baby_weight >= 2470& baby_weight <= 3788)
+
+library(MASS)
+library(lubridate)
+
+# # Define the models using robust linear regression
+rlm_sha <- rlm(shannon ~ study_group+baby_weight , data = met)
+rlm_obs <- rlm(observed ~ study_group+baby_weight, data = met)
+rlm_simp <- rlm(simpson ~ study_group+baby_weight, data = met)
+
+# Function to calculate results for a model
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = names(t_vals),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for all three models
+sha_results <- calculate_model_results(rlm_sha, "Shannon")
+obs_results <- calculate_model_results(rlm_obs, "Observed Species")
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Combine all results and round numeric columns
+all_results <- rbind(sha_results, obs_results, simp_results)
+numeric_cols <- sapply(all_results, is.numeric)
+all_results[numeric_cols] <- round(all_results[numeric_cols], 4)
+
+# Print combined results
+print("Combined results for all diversity models:")
+print(all_results)
+
+#Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(all_results, file = file.path(output_dir, "more_than_baby_weight_range.csv"))
+
+p1 <- ggplot(met, aes(x = baby_weight, y = shannon, color = study_group)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = TRUE) +
+    theme_minimal() +
+  scale_color_manual(values = c("Control" = "#5a9bd4", "PE" = "#ff6347")) +
+    labs(title = "Shannon Diversity vs Baby weight (g)",
+         x = "Baby weight (g)",
+         y = "Shannon Diversity Index",
+         color = "Study Group")
+
+print(p1)
+ggsave(filename = file.path(output_dir, "Shannon_vs_baby_weight_range.pdf"),
+       plot = p1, width = 6, height = 4)
+```
+#boxplots study_group
+
+```{r}
+library(ggprism)
+library(tidyr)
+library(dplyr)
+PHY_fil_rar_alpha_meco
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+#remove NA in study_group
+met <- met[!is.na(met$study_group), ]
+
+
+# Convertir los datos a formato largo
+met_long <- met %>%
+  dplyr::select(study_group, observed, shannon, simpson) %>%
+  pivot_longer(cols = c(observed, shannon, simpson),
+               names_to = "measure",
+               values_to = "value")
+
+# Convertir measure a factor con el orden deseado
+met_long$measure <- factor(met_long$measure, 
+                          levels = c("observed", "shannon", "simpson"),
+                          labels = c("Observed", "Shannon", "Simpson"))
+
+# Crear el gráfico
+p1=ggplot(met_long, aes(x = study_group, y = value, fill = study_group)) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0.2), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(x = "Study Group", 
+         y = "Alpha Diversity") + 
+    scale_fill_manual(values = c("Control" = "#5a9bd4", "PE" = "#ff6347")) +
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14),
+          legend.position = "none")
+
+ggsave(filename = file.path(output_dir, "Shannon_sg.pdf"),
+       plot = p1, width = 6, height = 4)
+
+```
+#wilcox
+```{r}
+# Wilcoxon test for Shannon diversity
+wilcox_test_shannon <- wilcox.test(shannon ~ study_group, data = met)
+print(wilcox_test_shannon)
+# Wilcoxon test for Simpson diversity
+wilcox_test_simpson <- wilcox.test(simpson ~ study_group, data = met)
+print(wilcox_test_simpson)
+# Wilcoxon test for Observed species
+wilcox_test_observed <- wilcox.test(observed ~ study_group, data = met)
+print(wilcox_test_observed)
+
+
+```
+
+#ALPHA severe (testing var)
+```{r}
+library(MASS)
+library(lubridate)
+
+PHY_fil_rar_alpha_meco
+
+phy <- subset_samples(PHY_fil_rar_alpha_meco, severe_3cat != "control")
+
+met <- data.frame(sample_data(PHY_fil_rar_alpha_meco))
+
+met$mod
+# Define the models using robust linear regression
+rlm_sha <- rlm(shannon ~ severe + baby_weight + days_stool1+baby_nicu +ethnicity+mod, data = met)
+rlm_obs <- rlm(observed ~ severe + baby_weight + days_stool1+baby_nicu+ethnicity+mod , data = met)
+rlm_simp <- rlm(simpson ~ severe + baby_weight + days_stool1 +baby_nicu+ethnicity+mod, data = met)
+
+
+#shapiro
+shapiro.test(residuals(rlm_sha))
+shapiro.test(residuals(rlm_obs))
+shapiro.test(residuals(rlm_simp))
+# Function to calculate results for a model
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = names(t_vals),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for all three models
+sha_results <- calculate_model_results(rlm_sha, "Shannon")
+obs_results <- calculate_model_results(rlm_obs, "Observed Species")
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Combine all results and round numeric columns
+all_results <- rbind(sha_results, obs_results, simp_results)
+numeric_cols <- sapply(all_results, is.numeric)
+all_results[numeric_cols] <- round(all_results[numeric_cols], 4)
+
+# Print combined results
+print("Combined results for all diversity models:")
+print(all_results)
+
+# Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(all_results, file = file.path(output_dir, "sev_bw_day_nicu_eth_mod.csv"))
+
+```
+# ALPHA severe (final) RLM
+
+el modelo con la interaccion no es significato (study_group * baby_weight)
+Entonces em mejor modelo es el aditivo
+
+```{r}
+library(MASS)
+library(lubridate)
+phy=PHY_fil_rar_alpha_meco
+phy <- subset_samples(phy, !is.na(study_group))
+
+phy <- subset_samples(phy, severe_3cat != "control")
+
+met <- data.frame(sample_data(phy))
+
+library(MASS)
+library(lubridate)
+
+# # Define the models using robust linear regression
+rlm_sha <- rlm(shannon ~ severe+baby_weight   , data = met)
+rlm_obs <- rlm(observed ~ severe+baby_weight  , data = met)
+rlm_simp <- rlm(simpson ~ severe+baby_weight , data = met)
+
+# Function to calculate results for a model
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = names(t_vals),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for all three models
+sha_results <- calculate_model_results(rlm_sha, "Shannon")
+obs_results <- calculate_model_results(rlm_obs, "Observed Species")
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Combine all results and round numeric columns
+all_results <- rbind(sha_results, obs_results, simp_results)
+numeric_cols <- sapply(all_results, is.numeric)
+all_results[numeric_cols] <- round(all_results[numeric_cols], 4)
+
+# Print combined results
+print("Combined results for all diversity models:")
+print(all_results)
+
+#Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/severe/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(all_results, file = file.path(output_dir, "sev_bw.csv"))
+
+p1 <- ggplot(met, aes(x = baby_weight, y = shannon, color = severe)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = TRUE) +
+    theme_minimal() +
+  scale_color_manual(values = c("Yes" = "red", "No" = "orange")) +
+    labs(title = "Shannon Diversity vs Baby weight (g)",
+         x = "Baby weight (g)",
+         y = "Shannon Diversity Index",
+         color = "PE severe")
+
+print(p1)
+ggsave(filename = file.path(output_dir, "Shannon_vs_severe.pdf"),
+       plot = p1, width = 6, height = 4)
+```
+
+
+#boxplots severe
+
+```{r}
+library(ggprism)
+library(tidyr)
+library(dplyr)
+phy<-PHY_fil_rar_alpha_meco
+phy <- subset_samples(phy, !is.na(study_group))
+
+phy <- subset_samples(phy, severe_3cat != "control")
+
+met <- data.frame(sample_data(phy))
+
+#remove NA in severe
+met <- met[!is.na(met$severe), ]
+
+
+# Convertir los datos a formato largo
+met_long <- met %>%
+  dplyr::select(severe, observed, shannon, simpson) %>%
+  pivot_longer(cols = c(observed, shannon, simpson),
+               names_to = "measure",
+               values_to = "value")
+
+# Convertir measure a factor con el orden deseado
+met_long$measure <- factor(met_long$measure, 
+                          levels = c("observed", "shannon", "simpson"),
+                          labels = c("Observed", "Shannon", "Simpson"))
+
+# Crear el gráfico
+p1=ggplot(met_long, aes(x = severe, y = value, fill = severe)) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0.2), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(x = "PE severe", 
+         y = "Alpha Diversity") + 
+    scale_fill_manual(values = c("Yes" = "red", "No" = "orange")) +
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14),
+          legend.position = "none")
+
+print(p1)
+ggsave(filename = file.path( "/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/severe/Shannon_severe.pdf"),
+       plot = p1, width = 6, height = 4)
+
+```
+#ALPHA severe 3 cat 
+```{r}
+library(MASS)
+library(lubridate)
+phy=PHY_fil_rar_alpha_meco
+phy <- subset_samples(phy, !is.na(study_group))
+
+
+met <- data.frame(sample_data(phy))
+
+met$severe_3cat <- factor(met$severe_3cat, levels = c("No", "Yes", "control"))
+
+# # Define the models using robust linear regression
+rlm_sha <- rlm(shannon ~ severe_3cat+baby_weight   , data = met)
+rlm_obs <- rlm(observed ~ severe_3cat+baby_weight  , data = met)
+rlm_simp <- rlm(simpson ~ severe_3cat+baby_weight , data = met)
+
+# Function to calculate results for a model
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = names(t_vals),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for all three models
+sha_results <- calculate_model_results(rlm_sha, "Shannon")
+obs_results <- calculate_model_results(rlm_obs, "Observed Species")
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Combine all results and round numeric columns
+all_results <- rbind(sha_results, obs_results, simp_results)
+numeric_cols <- sapply(all_results, is.numeric)
+all_results[numeric_cols] <- round(all_results[numeric_cols], 4)
+
+# Print combined results
+print("Combined results for all diversity models:")
+print(all_results)
+
+#Define output directory with today's date
+output_dir <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/alpha/rlm/severe/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Save the table as a CSV file
+write.csv(all_results, file = file.path(output_dir, "sev3cat_bw_No_as_ref.csv"))
+
+p1 <- ggplot(met, aes(x = baby_weight, y = shannon, color = severe_3cat)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = TRUE) +
+    theme_minimal() +
+  scale_color_manual(values = c("Yes" = "red", "No" = "orange", "control"= "blue")) +
+    labs(title = "Shannon Diversity vs Baby weight (g)",
+         x = "Baby weight (g)",
+         y = "Shannon Diversity Index",
+         color = "PE severe")
+
+print(p1)
+ggsave(filename = file.path(output_dir, "Shannon_vs_severe3cat.pdf"),
+       plot = p1, width = 6, height = 4)
+
+```
+
+#boxplots severe 3cat
+
+```{r}
+library(ggprism)
+library(tidyr)
+library(dplyr)
+phy<-PHY_fil_rar_alpha_meco
+phy <- subset_samples(phy, !is.na(study_group))
+
+#phy <- subset_samples(phy, severe_3cat != "control")
+
+met <- data.frame(sample_data(phy))
+
+#remove NA in severe
+met <- met[!is.na(met$severe_3cat), ]
+
+
+# Convertir los datos a formato largo
+met_long <- met %>%
+  dplyr::select(severe_3cat, observed, shannon, simpson) %>%
+  pivot_longer(cols = c(observed, shannon, simpson),
+               names_to = "measure",
+               values_to = "value")
+
+# Convertir measure a factor con el orden deseado
+met_long$measure <- factor(met_long$measure, 
+                          levels = c("observed", "shannon", "simpson"),
+                          labels = c("Observed", "Shannon", "Simpson"))
+
+# Crear el gráfico
+p1=ggplot(met_long, aes(x = severe_3cat, y = value, fill = severe_3cat)) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0.2), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(x = "PE severe", 
+         y = "Alpha Diversity") + 
+    scale_fill_manual(values = c("Yes" = "red", "No" = "orange", "control"= "blue")) +
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),  
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14),
+          legend.position = "none")
+
+print(p1)
+ggsave(filename = file.path(output_dir, "Shannon_severe3cat.pdf"),
+       plot = p1, width = 6, height = 4)
+
+```
+#barplot function
+Funcion para generar los barplot. Correr una sola vez
+```{r}
+phy=PHY_fil_rar_alpha_meco
+
+#phy_phylum=tax_glom(PHY_fil_rar_alpha_meco, taxrank= "Phylum")
+
+
+colores = c("steelblue", "lightcoral", "mediumseagreen", "slateblue", "goldenrod", 
+"cadetblue", "tomato", "darkolivegreen", "orchid", "cornflowerblue", "darkkhaki", "turquoise", "salmon", "grey", "mediumorchid", "lightgreen", "skyblue", "sandybrown", "plum", "lightsteelblue", "peru", "darkturquoise", "rosybrown", "mediumaquamarine","palevioletred", "lightblue", "darkgrey",  "thistle", "tan", "lightslategray", "aquamarine", "indianred", "mediumslateblue","darkseagreen", "lightpink", "burlywood","powderblue", "firebrick",  "navajowhite", "seagreen", "dodgerblue", "moccasin", "chartreuse", "darkorange", "deeppink", "gold", "lavender", "palegreen","gray", "magenta", "deepskyblue", "blue", "forestgreen", "royalblue4", "mediumspringgreen", "gold3", "darkorange1", "saddlebrown", "slategray2", "seagreen", "snow4", "darkgoldenrod1", "lemonchiffon", "darkorchid", "lightskyblue", "deeppink", "khaki2", "magenta", "brown1", "cyan3", "royalblue2", "darksalmon", "lemonchiffon", "green3", "purple3", "steelblue","pink",  "chocolate1", "coral", "coral3", "coral4", "darkcyan", "cadetblue", "navajowhite3", "mediumpurple3", "bisque4")
+
+
+
+# Function for filtering data by treshold abundance
+db_sum_filter = function(phylo_object = NULL, 
+                         tax_cat = NULL, 
+                         meta_cat = NULL, 
+                         ref_otu = NULL, 
+                         treshold = 10,
+                         colores = NULL) {
+    
+    # Transforming counts in proportions and extracting otu proportions
+    phylo_object_prop = transform_sample_counts(phylo_object, function(x) x/sum(x))
+    tax_cat_count = otu_table(phylo_object_prop)
+                                                
+    # Filtering tax_cat_sum treshold
+    tax_cat_count0 = tax_cat_count[apply(tax_cat_count, 1, sum) >= treshold/100,]
+    tax_cat_count1 = tax_cat_count[apply(tax_cat_count, 1, sum) < treshold/100,]
+    df = as.data.frame(apply(tax_cat_count1, 2, sum))
+    df = t(df)
+    tax_tres_lab = paste0("< ", treshold, "%")
+    rownames(df) = tax_tres_lab
+    tax_cat_count2 = rbind(tax_cat_count0, df)
+                                                
+    # Extracting and processing taxonomies                                             
+    taxonomy = data.frame(tax_table(phylo_object_prop))
+    tax_tres = data.frame("Kingdom" = tax_tres_lab, 
+                          "Phylum" = tax_tres_lab, 
+                          "Class" = tax_tres_lab, 
+                          "Order" = tax_tres_lab, 
+                          "Family" = tax_tres_lab, 
+                          "Genus" = tax_tres_lab, 
+                          "Species" = tax_tres_lab)#, 
+                         # "Strain" = NA)
+    rownames(tax_tres) = tax_tres_lab
+    taxonomy0 = rbind(taxonomy, tax_tres)
+    
+    # Merging taxonomies with new counts                                              
+    tax_prop = merge(taxonomy0, tax_cat_count2, by = "row.names")
+    rownames(tax_prop) = tax_prop$Row.names
+    tax_prop$Row.names = NULL
+                                                
+    # Melt dataset to have sample ids as column
+    taxonomic_levels = c("Kingdom", "Phylum", "Class", "Order","Family", "Genus", "Species") # "Family",, "Strain"
+    tax_prop_sample = reshape2::melt(tax_prop, id = taxonomic_levels)
+    colnames(tax_prop_sample)[8] = "study_id_formated" 
+                                          
+    # Merging melted dataset with metadata
+    meta = data.frame(sample_data(phylo_object))
+    tax_prop_sample_meta = merge(tax_prop_sample, meta, by.x = "study_id_formated", by.y = "row.names")
+
+    # Generating factors and data for plotting
+    db_tax = tax_prop_sample_meta %>%
+        group_by(.dots = c(tax_cat)) %>%
+        summarise(Abundance = sum(value)) %>%
+        arrange(Abundance) %>%
+        as.data.frame
+                                           
+    # If ref_otu is not provided setting default value                                            
+    if(is.null(ref_otu)) ref_otu = db_tax[max(which(db_tax[,tax_cat]!=tax_tres_lab)), tax_cat]   
+                                                
+    tax_order = c(tax_tres_lab, setdiff(as.character(db_tax[,tax_cat]), c(ref_otu, tax_tres_lab)), ref_otu)
+                                               
+    db_plot = tax_prop_sample_meta %>%
+        group_by(.dots = c("study_id_formated", tax_cat)) %>%
+        summarise(Abundance = sum(value)) %>%
+        as.data.frame
+    
+    sample_order = db_plot[db_plot[,tax_cat]==ref_otu,] %>%
+        arrange(desc(Abundance)) %>%
+        dplyr::select(study_id_formated) %>%
+        unlist %>%
+        as.character
+
+    db_plot = tax_prop_sample_meta %>%
+        group_by(.dots =  c("study_id_formated", tax_cat, meta_cat)) %>%
+        summarise(Abundance = sum(value)) %>%
+        as.data.frame
+                                                
+    # Reordering factors for plotting
+    db_plot[,tax_cat] = factor(as.character(db_plot[,tax_cat]), levels = tax_order)
+    db_plot[,"study_id_formated"] = factor(as.character(db_plot[,"study_id_formated"]), levels = sample_order)
+                                                
+    # Plotting
+    if(!is.null(meta_cat)) {
+        p = ggplot(db_plot, aes_string(x = "study_id_formated", y = "Abundance", fill= tax_cat)) + 
+        geom_bar(stat = "identity", position = "fill") +
+        facet_grid(~get(meta_cat), scales = "free",space = "free") +
+        theme(legend.position="right", legend.text=element_text(size=9)) + 
+        guides(fill=guide_legend(nrow=15)) +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.text=element_text(size=8)) +
+        scale_fill_manual(values = colores[1:length(tax_order)])
+    } else {
+        p = ggplot(db_plot, aes_string(x = "study_id_formated", y = "Abundance", fill= tax_cat)) + 
+        geom_bar(stat = "identity", position = "fill") +
+        theme(legend.position="right", legend.text=element_text(size=9)) + 
+        guides(fill=guide_legend(nrow=15)) +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.text=element_text(size=8)) +
+        scale_fill_manual(values = colores[1:length(tax_order)])
+    }
+    
+        
+  
+              
+    return(list(db_plot,p))
+}
+
+
+```
+
+#actual barplot
+```{r}
+#remover NA
+#phy <- subset_taxa(phy, !is.na(tax_table(phy)[, "Species"]) & tax_table(phy)[, "Species"] != "")
+
+# Obtener la fecha de hoy
+fecha_hoy <- Sys.Date()
+
+# Definir la ruta completa del archivo PDF con la fecha incluida
+output_file <- paste0("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/barplots/",fecha_hoy,"meco_16S_gen.pdf")
+
+# Crear el directorio si no existe
+dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
+
+# Supongamos que lista_db_p es el resultado de alguna función de análisis de datos
+lista_db_p <- db_sum_filter(phylo_object = phy, 
+                            tax_cat = "Genus", 
+                           #  tax_cat = "Species", 
+                            #meta_cat = "body_site", 
+                           # meta_cat = "study_group", 
+                          # ref_otu = "g__Lactobacillus crispatus",
+                          # ref_otu = "g__Haemophilus_parainfluenzae",
+                           #ref_otu = "g__Streptococcus sp._HMT_061",
+                            ref_otu = "g__Enterococcus_H_360604",
+                            treshold = 20,
+                            colores = colores
+                           )
+lista_db_p[[2]]
+# Crear el archivo PDF
+pdf(output_file, width = 16, height = 5)
+lista_db_p[[2]] # Reemplaza con tu código específico para generar el gráfico
+dev.off()
+
+```
+
+<!-- # BETA Aitchison +bw -->
+<!-- Cambiar la formula segun neceario y cambiar entonces el label de la folder -->
+<!-- Since mod of delivery is so irrelevant, we will remove it from the model -->
+<!-- ```{r} -->
+<!-- #load phyloseq object -->
+<!-- phy = PHY_fil_rar_alpha_meco -->
+
+<!-- #remove NA study_group from phy -->
+<!-- phy <- subset_samples(phy, !is.na(study_group)) -->
+
+<!-- #extract metadata from phyloseq object -->
+<!-- met_phy <- data.frame(sample_data(phy)) -->
+<!-- met_phy$sg <- met_phy$study_group -->
+<!-- met_phy$study_id_formated -->
+
+<!-- # set study_id_formated como rownames(met_phy) -->
+<!-- #rownames(met_phy) <- met_phy$study_id_formated -->
+
+<!-- phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy) -->
+
+<!-- # Asegúrate de que la tabla OTU contiene solo valores positivos -->
+<!-- OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count -->
+
+<!-- # Extraer la matriz OTU del objeto phyloseq -->
+<!-- OTU_matrix <- otu_table(OTU_table) -->
+
+<!-- # Realizar la transformación clr (centered log-ratio) -->
+<!-- clr_transformed <- clr(as.matrix(OTU_matrix)) -->
+
+
+<!-- # Crear un nuevo objeto phyloseq con la transformación clr -->
+<!-- phy_clr <- phyloseq(otu_table(clr_transformed, taxa_are_rows=TRUE), -->
+<!--                     tax_table(phy),  -->
+<!--                     sample_data(met_phy)) -->
+
+<!-- # Calcular la distancia Aitchison utilizando la distancia euclidiana -->
+<!-- aitch_dist <- phyloseq::distance(phy_clr, method = "euclidean") -->
+
+<!-- form_mod3=formula(paste0("aitch_dist~study_group + baby_weight ")) -->
+<!-- #form_mod3=formula(paste0("aitch_dist~study_group:baby_weight+ mod +ethnicity")) -->
+<!-- #form_mod3=formula(paste0("aitch_dist~study_group + gestational_age+ mod +ethnicity")) -->
+
+
+<!-- set.seed(711) -->
+<!-- mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin") -->
+
+<!-- print(mod_adonis3) -->
+
+<!-- # Obtener la fecha de hoy en formato YYYYMMDD -->
+<!-- fecha_hoy <- format(Sys.Date(), "%Y-%m-%d") -->
+
+<!-- # Crear una carpeta con la fecha de hoy dentro de results/beta/ -->
+<!-- #dir.create(file.path("results/beta", fecha_hoy), showWarnings = FALSE, recursive = TRUE) -->
+<!-- dir.create(file.path("res/beta", fecha_hoy), showWarnings = FALSE, recursive = TRUE)  -->
+
+<!-- # Definir la ruta completa del archivo CSV con la fecha incluida para guardar el modelo -->
+<!-- #output_csv <- file.path("results/beta", fecha_hoy, paste0("adonis_IBD_Meds.csv")) -->
+<!-- #output_csv <- file.path("WGS/results/beta_phylo", fecha_hoy, paste0("ait.csv")) -->
+<!-- output_csv <- file.path("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/res/beta", fecha_hoy, #paste0("adonis_aitchison_results_baby_weight.csv")) -->
+<!-- # Convertir el resultado del modelo a data.frame y guardarlo como CSV -->
+<!-- write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE) -->
+
+<!-- # Mostrar el resultado del modelo -->
+<!-- print(mod_adonis3) -->
+<!-- pval_consensus=mod_adonis3$`Pr(>F)`[1] -->
+
+<!-- # Realizar PCoA (MDS) con las distancias Aitchison -->
+<!-- set.seed(711) -->
+<!-- mds_result <- cmdscale(aitch_dist, eig = TRUE, k = 2)  # `k` es el número de dimensiones -->
+
+<!-- # Convertir los resultados de MDS a un dataframe -->
+<!-- mds_df <- as.data.frame(mds_result$points) -->
+<!-- colnames(mds_df) <- c("MDS1", "MDS2") -->
+<!-- # Agregar IDs de las muestras al dataframe -->
+<!-- mds_df$study_id_formated <- rownames(mds_df) -->
+
+<!-- # Combinar las coordenadas MDS con los metadatos -->
+<!-- merged_data_mds <- merge(met_phy, mds_df, by = 0) -->
+
+<!-- # Calcular p-value y R2 del modelo Adonis -->
+<!-- pval <- round(mod_adonis3$`Pr(>F)`[1], 3) -->
+<!-- r2 <- round(mod_adonis3$R2[1] * 100, 1) -->
+
+<!-- # Crear el gráfico -->
+<!-- p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = study_group)) + -->
+<!--     geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) + -->
+
+<!--   geom_point(size = 5, alpha = 1) + -->
+<!--   stat_ellipse(type = "norm", level = 0.95) +  # Agregar elipses de confianza -->
+<!--   theme_bw() + -->
+<!--   theme( -->
+<!--     axis.text.x = element_text(angle = 90, hjust = 1),  -->
+<!--     axis.text = element_text(size = 12), -->
+<!--     legend.text = element_text(size = 12), -->
+<!--     strip.text.x = element_text(size = 12) -->
+<!--   ) + -->
+<!--   scale_color_manual(values = c("#ff6347", "#5a9bd4")) +  # Colores personalizados -->
+<!--   ggtitle("PCoA-Aitchison distances for stool samples") -->
+
+<!-- # Agregar p-value y R2 al gráfico -->
+<!-- p <- p + annotate( -->
+<!--   "text", -->
+<!--   x = Inf, y = Inf, -->
+<!--   label = paste("p-value =", pval, "\nR2 =", r2, "%"), -->
+<!--   hjust = 1.1, vjust = 1.1, -->
+<!--   size = 3.5, color = "red" -->
+<!-- ) -->
+
+<!-- # Ajustar tamaño del gráfico -->
+<!-- options(repr.plot.width = 6, repr.plot.height = 6, repr.plot.res = 200) -->
+
+<!-- # Imprimir el gráfico -->
+<!-- print(p) -->
+<!-- # Definir la ruta completa para guardar el gráfico en la misma carpeta que los resultados de texto -->
+<!-- output_plot <- file.path("res/beta", fecha_hoy, paste0("PCoA_Aitchison_stool_samples.pdf")) -->
+
+<!-- # Guardar el gráfico en formato PDF -->
+<!-- ggsave(output_plot, plot = p, width = 6, height = 6) -->
+
+
+<!-- ``` -->
+# PCoA bray y Jaccard (testing var)
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA study_group from phy
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated <- rownames(met_phy) 
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  #form_mod <- formula(paste0("dist_matrix ~ study_group+gestational_age "))
+  form_mod <- formula(paste0("dist_matrix ~ study_group + baby_weight + mod+ ethnicity+ baby_nicu+ days_stool1"))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta_exploring", fecha_hoy, paste0("adonis_", method, "_baby_wei.csv"))
+ # write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+rownames(mds_df) <- met_phy$study_id_formated
+mds_df$study_id_formated <- rownames(mds_df)
+
+  # Combinar coordenadas MDS con metadatos
+  merged_data_mds <- merge(met_phy, mds_df, by = 0)
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  
+}
+
+
+```
+
+
+
+# PCoA bray y Jaccard (final)
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA study_group from phy
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+#extract metadata from phyloseq object
+
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated <- rownames(met_phy)  # <- esto es lo que falta
+
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  #form_mod <- formula(paste0("dist_matrix ~ study_group+gestational_age "))
+  form_mod <- formula(paste0("dist_matrix ~ study_group + days_stool1 "))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta", fecha_hoy, paste0("adonis_", method, "_baby_days_stool1.csv"))
+ # write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+# Usar los mismos nombres que vienen del objeto de distancia
+mds_df$study_id_formated <- rownames(mds_df)
+
+# Asegúrate de que met_phy tenga esos mismos rownames
+merged_data_mds <- merge(mds_df, met_phy, by = "study_id_formated")
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+
+  # Crear el gráfico
+  p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = study_group)) +
+       geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+
+     geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+    scale_color_manual(values = c( "#5a9bd4","#ff6347")) +
+    ggtitle(paste0("PCoA-", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf, label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+  # Guardar el gráfico en formato PDF
+  output_plot <- file.path("res/beta", fecha_hoy, paste0("PCoA_", method, "_stool_samples.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 6)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  print(p)
+}
+
+
+```
+
+# PCoA severe (testing var) bray y Jaccard 
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove only severe_3cat != control
+phy <- subset_samples(phy, severe_3cat != "control")
+
+
+#remove NA study_group from phy
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+#extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated
+
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta_exploring/severe", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  form_mod <- formula(paste0("dist_matrix ~ severe + baby_weight + mod+ ethnicity+ baby_nicu+ days_stool1"))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta_exploring", fecha_hoy, paste0("adonis_", method, "_baby_wei.csv"))
+#  write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+rownames(mds_df) <- met_phy$study_id_formated
+mds_df$study_id_formated <- rownames(mds_df)
+
+  # Combinar coordenadas MDS con metadatos
+  merged_data_mds <- merge(met_phy, mds_df, by = 0)
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  
+}
+
+```
+# PCoA severe (final) bray y Jaccard
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(days_stool1))
+phy <- subset_samples(phy, severe_3cat != "control")
+
+
+#extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated
+
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta/severe", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  #form_mod <- formula(paste0("dist_matrix ~ severe+gestational_age "))
+  form_mod <- formula(paste0("dist_matrix ~ severe + baby_weight +days_stool1"))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta/severe", fecha_hoy, paste0("adonis_", method, "daystool_bw.csv"))
+ # write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+rownames(mds_df) <- met_phy$study_id_formated
+mds_df$study_id_formated <- rownames(mds_df)
+
+  # Combinar coordenadas MDS con metadatos
+  merged_data_mds <- merge(met_phy, mds_df, by = 0)
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+
+  # Crear el gráfico
+ p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = severe)) +
+ geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+
+ geom_point(size = 5, alpha = 1) +
+  stat_ellipse(type = "norm", level = 0.95) +
+  theme_bw() +
+  theme(
+  axis.text.x = element_text(angle = 90, hjust = 1),
+  axis.text = element_text(size = 12),
+  legend.text = element_text(size = 12),
+  strip.text.x = element_text(size = 12)
+  ) + # <-- Added the missing parenthesis here
+  scale_color_manual(values = c( "red","orange")) +
+  ggtitle(paste0("PCoA-", toupper(method), " distances for stool samples")) +
+  annotate("text", x = Inf, y = Inf, label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+  # Guardar el gráfico en formato PDF
+  output_plot <- file.path("res/beta/severe", fecha_hoy, paste0("PCoA_", method, "_stool_daY_bwsamples.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 6)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  print(p)
+}
+
+
+```
+# PCoA severe (final) bray y Jaccard wo bw w day_stool
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(days_stool1))
+phy <- subset_samples(phy, severe_3cat != "control")
+
+
+#extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated
+
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta/severe", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  #form_mod <- formula(paste0("dist_matrix ~ severe+gestational_age "))
+  form_mod <- formula(paste0("dist_matrix ~ severe +days_stool1"))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta/severe", fecha_hoy, paste0("adonis_", method, "_day_stool.csv"))
+ # write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+rownames(mds_df) <- met_phy$study_id_formated
+mds_df$study_id_formated <- rownames(mds_df)
+
+  # Combinar coordenadas MDS con metadatos
+  merged_data_mds <- merge(met_phy, mds_df, by = 0)
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+
+  # Crear el gráfico
+  p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = severe)) +
+ geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+
+ geom_point(size = 5, alpha = 1) +
+  stat_ellipse(type = "norm", level = 0.95) +
+  theme_bw() +
+  theme(
+  axis.text.x = element_text(angle = 90, hjust = 1),
+  axis.text = element_text(size = 12),
+  legend.text = element_text(size = 12),
+  strip.text.x = element_text(size = 12)
+  ) + # <-- Added the missing parenthesis here
+  scale_color_manual(values = c( "red","orange")) +
+  ggtitle(paste0("PCoA-", toupper(method), " distances for stool samples")) +
+  annotate("text", x = Inf, y = Inf, label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+  # Guardar el gráfico en formato PDF
+  output_plot <- file.path("res/beta/severe", fecha_hoy, paste0("PCoA_", method, "_stool_samples.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 6)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  print(p)
+}
+
+
+```
+# PCoA severe 3cats bray y Jaccard +bw
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+
+
+#extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated
+
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta/severe_3cat", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  #form_mod <- formula(paste0("dist_matrix ~ severe+gestational_age "))
+  form_mod <- formula(paste0("dist_matrix ~ severe_3cat + baby_weight "))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta/severe_3cat", fecha_hoy, paste0("adonis_", method, "_baby_wei.csv"))
+ # write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+rownames(mds_df) <- met_phy$study_id_formated
+mds_df$study_id_formated <- rownames(mds_df)
+
+  # Combinar coordenadas MDS con metadatos
+  merged_data_mds <- merge(met_phy, mds_df, by = 0)
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+  # Crear el gráfico
+  p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = severe_3cat)) +
+       geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+
+     geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+scale_color_manual(values = c( "#5a9bd4","orange","red"))
+    ggtitle(paste0("PCoA-", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf, label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+  # Guardar el gráfico en formato PDF
+  output_plot <- file.path("res/beta/severe_3cat", fecha_hoy, paste0("PCoA_", method, "_baby_weight.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 6)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  print(p)
+}
+```
+# PCoA severe (final) bray y Jaccard wo bw w day_stool 3 cats
+descomentar la formila a correr y editar el folder a guardarlo
+```{r}
+#load phyloseq object
+#load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+
+#extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$study_id_formated
+
+# set study_id_formated como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id_formated
+
+#phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Definir las distancias a calcular
+distance_methods <- c("bray", "jaccard")
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta
+dir.create(file.path("res/beta/severe_3cat", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop para cada método de distancia
+for (method in distance_methods) {
+  
+  # Calcular la distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Definir la fórmula para Adonis
+  #form_mod <- formula(paste0("dist_matrix ~ severe+gestational_age "))
+  form_mod <- formula(paste0("dist_matrix ~ severe_3cat +days_stool1"))
+
+  # Ejecutar Adonis
+  set.seed(711)
+  mod_adonis <- vegan::adonis2(form_mod, data = met_phy, permutations = 999, by = "margin")
+
+  # Guardar resultados del Adonis
+  output_csv <- file.path("res/beta/severe_3cat", fecha_hoy, paste0("adonis_", method, "_day_stool.csv"))
+#  write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # Realizar PCoA (MDS)
+  set.seed(711)
+  mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Cambia también rownames
+rownames(mds_df) <- met_phy$study_id_formated
+mds_df$study_id_formated <- rownames(mds_df)
+
+  # Combinar coordenadas MDS con metadatos
+  merged_data_mds <- merge(met_phy, mds_df, by = 0)
+
+  # Calcular p-value y R2 del modelo Adonis
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+
+  # Crear el gráfico
+  p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = severe_3cat)) +
+ geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+
+ geom_point(size = 5, alpha = 1) +
+  stat_ellipse(type = "norm", level = 0.95) +
+  theme_bw() +
+  theme(
+  axis.text.x = element_text(angle = 90, hjust = 1),
+  axis.text = element_text(size = 12),
+  legend.text = element_text(size = 12),
+  strip.text.x = element_text(size = 12)
+  ) + # <-- Added the missing parenthesis here
+  scale_color_manual(values = c( "red","orange", "blue")) +
+  ggtitle(paste0("PCoA-", toupper(method), " distances for stool samples")) +
+  annotate("text", x = Inf, y = Inf, label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+  # Guardar el gráfico en formato PDF
+  output_plot <- file.path("res/beta/severe_3cat", fecha_hoy, paste0("PCoA_", method, "_stool_samples.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 6)
+
+  # Imprimir resultados y gráfico
+  print(mod_adonis)
+  print(p)
+}
+```
+
+
+#betadisper bray study_goup
+```{r}
+
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+
+group= "study_group"
+ 
+
+palette <- c("Control" = "#5a9bd4", "PE" = "#ff6347")
+
+bs="meco"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+dist_metrics = c("bray")
+metric_names = c("bray")
+
+# 
+# dist_metrics = c("jaccard")
+# metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( study_group ,baby_weight) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("res/betadisper", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+```
+
+#betadisper jaccard study_goup
+```{r}
+
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+
+group= "study_group"
+ 
+
+palette <- c("Control" = "#5a9bd4", "PE" = "#ff6347")
+
+bs="meco"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+dist_metrics = c("jaccard")
+metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( study_group ,baby_weight) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("res/betadisper", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5,size = 2) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper.pdf")), plot = p, width = 1.7, height = 3)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+print(p)
+```
+#betadisper bray severe
+```{r}
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(severe))
+phy <- subset_samples(phy, severe_3cat != "control")
+
+group= "severe"
+palette <- c("Yes" = "red", "No" = "orange")
+
+bs="meco"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+dist_metrics = c("bray")
+metric_names = c("bray")
+
+# 
+# dist_metrics = c("jaccard")
+# metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( 
+                   #severe_3cat,
+                   #severe,
+                   severe, 
+                   baby_weight) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("res/betadisper", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+print(p)
+```
+
+#betadisper jaccard severe
+```{r}
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(severe))
+phy <- subset_samples(phy, severe_3cat != "control")
+
+group= "severe"
+palette <- c("Yes" = "red", "No" = "orange")
+
+bs="meco"
+
+# 2. Elegir metrica de distancia
+dist_metrics = c("jaccard")
+metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( 
+                   #severe_3cat,
+                   #severe,
+                   severe, 
+                   baby_weight) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("res/betadisper", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5, size = 2) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper.pdf")), plot = p, width = 2.5, height = 3.5)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+print(p)
+```
+
+
+#betadisper bray severe 3cat
+```{r}
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(severe_3cat))
+
+group= "severe_3cat"
+palette <- c("control"="#5a9bd4", "Yes" = "red", "No" = "orange")
+
+bs="meco"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+dist_metrics = c("bray")
+metric_names = c("bray")
+
+# 
+# dist_metrics = c("jaccard")
+# metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( severe_3cat,
+                   #severe, 
+                   baby_weight) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("res/betadisper", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+print(p)
+```
+#betadisper jaccard severe 3cat
+```{r}
+phy = PHY_fil_rar_alpha_meco
+# Cargar librerías necesarias (asegúrate de que estén instaladas)
+library(phyloseq)
+library(vegan)
+library(ggplot2)
+library(dplyr)
+
+# Asumo que tu objeto phyloseq 'phy' ya está cargado
+# phy = PHY_fil_rar_alpha_meco
+
+# Remover NAs de la columna 'severe_3cat'
+phy <- subset_samples(phy, !is.na(severe_3cat))
+
+# Definir variables
+group <- "severe_3cat"
+palette <- c("control"="#5a9bd4", "Yes" = "red", "No" = "orange")
+bs <- "meco"
+
+# Elegir métrica de distancia
+dist_metrics <- c("bray")
+metric_names <- c("bray")
+
+# Filtrar taxones que no están presentes en ninguna muestra
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+# Filtrar metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select(severe_3cat,
+                  baby_weight)
+
+# Crear una carpeta para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("res/betadisper", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta
+  # Asegurarse de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1'
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Crear el gráfico de boxplot
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper (prueba ómnibus)
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+  # NUEVO: Realizar la comparación por pares (TukeyHSD)
+  # Esto solo tiene sentido si la prueba de permutación anterior es significativa (p < 0.05)
+  if (permutest_betadisper$tab$`Pr(>F)`[1] < 0.05) {
+      
+      print("La prueba de permutación fue significativa. Realizando comparaciones por pares (TukeyHSD)...")
+      
+      pairwise_tukey <- TukeyHSD(betadisper_model)
+      
+      # Mostrar los resultados de las comparaciones por pares en la consola
+      print(pairwise_tukey)
+      
+      # Guardar los resultados de las comparaciones por pares en un archivo de texto
+      # Extraemos la tabla de resultados del objeto TukeyHSD
+      pairwise_df <- as.data.frame(pairwise_tukey[[group]])
+      
+      # Guardamos el archivo
+      write.table(pairwise_df, file = file.path(output_dir, paste0(dist_metrics[i], "_pairwise_tukeyHSD_", group, ".txt")), sep = "\t", quote = FALSE, col.names = NA)
+  } else {
+      print("La prueba de permutación no fue significativa. No se realizarán comparaciones por pares.")
+  }
+  
+}
+```
+#NMDS study_group +stoolday
+```{r}
+# Load phyloseq object
+phy <- PHY_fil_rar_alpha_meco
+
+# Remove NA from study_group
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+# Crear carpeta con fecha
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+dir.create(file.path("res/beta/study_group_NMDS", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Añadir pseudo-count
+phy_pseudo <- transform_sample_counts(phy, function(x) x + 1)
+
+# Extraer metadata y asegurar alineación
+met_phy <- data.frame(sample_data(phy_pseudo))
+met_phy$sample_id_formated <- rownames(met_phy)
+
+# Métodos de distancia
+distance_methods <- c("bray", "jaccard")
+
+for (method in distance_methods) {
+  
+  if (method == "jaccard") {
+    phy_use <- phy  # sin pseudo-count
+  } else {
+    phy_use <- phy_pseudo  # con pseudo-count
+  }
+
+  dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))
+
+  if (!all(labels(dist_matrix) == rownames(met_phy))) {
+    stop(paste("Mismatch entre dist_matrix y met_phy para método", method))
+  }
+
+  # Modelo Adonis
+  set.seed(711)
+  mod_adonis <- tryCatch(
+    vegan::adonis2(dist_matrix ~ study_group + days_stool1, data = met_phy, permutations = 999, by = "margin"),
+    error = function(e) e
+  )
+
+  # Verificar si adonis falló
+  if (inherits(mod_adonis, "error")) {
+    warning(paste("Adonis falló para", method, ":", mod_adonis$message))
+    next
+  }
+
+  # Guardar resultados de Adonis
+  output_csv <- file.path("res/beta/study_group_NMDS", fecha_hoy, paste0("adonis_", method, "_stool_day.csv"))
+  write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+
+  # NMDS
+  set.seed(711)
+  nmds_result <- vegan::metaMDS(dist_matrix, k = 2, trymax = 50)
+  nmds_df <- as.data.frame(nmds_result$points)
+  colnames(nmds_df) <- c("NMDS1", "NMDS2")
+  nmds_df$sample_id_formated <- rownames(nmds_df)
+
+  # Merge con metadata
+  merged_data_mds <- merge(met_phy, nmds_df, by = "sample_id_formated")
+  if (nrow(merged_data_mds) == 0) {
+    warning(paste("Merged data para", method, "está vacía. Revisa sample names."))
+    next
+  }
+
+  # p-value y R2 del primer término (study_group)
+  pval <- round(mod_adonis[1, "Pr(>F)"], 3)
+  r2 <- round(mod_adonis[1, "R2"] * 100, 1)
+
+  # Plot NMDS
+  p <- ggplot(merged_data_mds, aes(x = NMDS1, y = NMDS2, color = study_group)) +
+    geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+    geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+    scale_color_manual(values = c("#5a9bd4", "#ff6347")) +
+    ggtitle(paste0("NMDS - ", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf,
+             label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+  # Guardar plot
+  output_plot <- file.path("res/beta/study_group_NMDS", fecha_hoy, paste0("NMDS_", method, "_stool_samples.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 5)
+
+  # Mostrar resultados
+  print(mod_adonis)
+  print(p)
+}
+
+
+```
+#NMDS severe + bw
+```{r}
+# Load phyloseq object
+phy <- PHY_fil_rar_alpha_meco
+
+# Remove NA and "control" from severe_3cat
+phy <- subset_samples(phy, !is.na(severe))
+phy <- subset_samples(phy, severe_3cat != "control")
+
+# Extract metadata
+met_phy <- data.frame(sample_data(phy))
+rownames(met_phy) <- met_phy$study_id_formated
+
+# Añadir pseudo-count
+OTU_table <- transform_sample_counts(phy, function(x) x + 1)
+
+# Métodos de distancia
+distance_methods <- c("bray", "jaccard")
+
+# Crear carpeta con fecha
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+dir.create(file.path("res/beta/severe", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop
+for (method in distance_methods) {
+  
+  # Calcular matriz de distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Modelo Adonis
+  set.seed(711)
+mod_adonis <- tryCatch(
+  vegan::adonis2(dist_matrix ~ severe + baby_weight, data = met_phy, permutations = 999, by = "margin"),
+  error = function(e) e
+)  
+  # Guardar resultados de Adonis
+  output_csv <- file.path("res/beta/severe", fecha_hoy, paste0("adonis_", method, "_baby_wei.csv"))
+  write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+  
+  # Realizar NMDS
+  set.seed(711)
+  nmds_result <- vegan::metaMDS(dist_matrix, k = 2, trymax = 100)
+  nmds_df <- as.data.frame(nmds_result$points)
+  colnames(nmds_df) <- c("NMDS1", "NMDS2")
+  rownames(nmds_df) <- met_phy$study_id_formated
+  nmds_df$study_id_formated <- rownames(nmds_df)
+  # Agregar study_id_formated como columna
+met_phy$study_id_formated <- rownames(met_phy)
+
+# Merge
+merged_data_mds <- merge(met_phy, nmds_df, by = "study_id_formated")
+  # Merge con metadata
+
+  
+  # p-value y R2
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+  
+  # Plot NMDS
+  p <- ggplot(merged_data_mds, aes(x = NMDS1, y = NMDS2, color = severe)) +
+    geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+    geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+scale_color_manual(values = c("Yes" = "red", "No" = "orange"))+
+
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+    ggtitle(paste0("NMDS - ", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf,
+             label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+    
+  
+  # Guardar plot
+  output_plot <- file.path("res/beta/severe", fecha_hoy, paste0("NMDS_", method, "_stool_samples.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 5)
+  
+  # Print
+  print(mod_adonis)
+  print(p)
+}
+
+```
+#NMDS severe + stoolDay
+```{r}
+# Load phyloseq object
+phy <- PHY_fil_rar_alpha_meco
+
+# Remove NA and "control" from severe_3cat
+phy <- subset_samples(phy, !is.na(severe))
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+phy <- subset_samples(phy, severe_3cat != "control")
+
+# Extract metadata
+met_phy <- data.frame(sample_data(phy))
+rownames(met_phy) <- met_phy$study_id_formated
+
+# Añadir pseudo-count
+OTU_table <- transform_sample_counts(phy, function(x) x + 1)
+
+# Métodos de distancia
+distance_methods <- c("bray", "jaccard")
+
+# Crear carpeta con fecha
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+dir.create(file.path("res/beta/severe_NMDS", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop
+for (method in distance_methods) {
+  
+  # Calcular matriz de distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  # Modelo Adonis
+  set.seed(711)
+mod_adonis <- tryCatch(
+  vegan::adonis2(dist_matrix ~ severe + days_stool1, data = met_phy, permutations = 999, by = "margin"),
+  error = function(e) e
+)  
+  # Guardar resultados de Adonis
+  output_csv <- file.path("res/beta/severe_NMDS", fecha_hoy, paste0("adonis_", method, "_day_stool.csv"))
+  write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+  
+  # Realizar NMDS
+  set.seed(711)
+  nmds_result <- vegan::metaMDS(dist_matrix, k = 2, trymax = 100)
+  nmds_df <- as.data.frame(nmds_result$points)
+  colnames(nmds_df) <- c("NMDS1", "NMDS2")
+  rownames(nmds_df) <- met_phy$study_id_formated
+  nmds_df$study_id_formated <- rownames(nmds_df)
+  # Agregar study_id_formated como columna
+met_phy$study_id_formated <- rownames(met_phy)
+
+# Merge
+merged_data_mds <- merge(met_phy, nmds_df, by = "study_id_formated")
+  # Merge con metadata
+
+  
+  # p-value y R2
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+  
+  # Plot NMDS
+  p <- ggplot(merged_data_mds, aes(x = NMDS1, y = NMDS2, color = severe)) +
+    geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+    geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+scale_color_manual(values = c("Yes" = "red", "No" = "orange"))+
+
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+    ggtitle(paste0("NMDS - ", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf,
+             label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+    
+  
+  # Guardar plot
+  output_plot <- file.path("res/beta/severe_NMDS", fecha_hoy, paste0("NMDS_", method, "_day_stool.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 5)
+  
+  # Print
+  print(mod_adonis)
+  print(p)
+}
+
+```
+#NMDS severe 3cats
+```{r}
+# Load phyloseq object
+phy <- PHY_fil_rar_alpha_meco
+
+# Remove NA and "control" from severe_3cat
+phy <- subset_samples(phy, !is.na(severe_3cat))
+
+# Extract metadata
+met_phy <- data.frame(sample_data(phy))
+rownames(met_phy) <- met_phy$study_id_formated
+
+# Añadir pseudo-count
+OTU_table <- transform_sample_counts(phy, function(x) x + 1)
+
+# Métodos de distancia
+distance_methods <- c("bray", "jaccard")
+
+# Crear carpeta con fecha
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+dir.create(file.path("res/beta/severe_3cat_NMDS", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+
+# Loop
+for (method in distance_methods) {
+  
+  # Calcular matriz de distancia
+# Usá esto:
+if (method == "jaccard") {
+  phy_use <- phy
+} else {
+  phy_use <- transform_sample_counts(phy, function(x) x + 1)
+}
+dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Modelo Adonis
+  set.seed(711)
+mod_adonis <- tryCatch(
+  vegan::adonis2(dist_matrix ~ severe_3cat + baby_weight, data = met_phy, permutations = 999, by = "margin"),
+  error = function(e) e
+)  
+  # Guardar resultados de Adonis
+  output_csv <- file.path("res/beta/severe_3cat_NMDS", fecha_hoy, paste0("adonis_", method, ".csv"))
+  write.csv(as.data.frame(mod_adonis), file = output_csv, row.names = TRUE)
+  
+  # Realizar NMDS
+  set.seed(711)
+  nmds_result <- vegan::metaMDS(dist_matrix, k = 2, trymax = 100)
+  nmds_df <- as.data.frame(nmds_result$points)
+  colnames(nmds_df) <- c("NMDS1", "NMDS2")
+  rownames(nmds_df) <- met_phy$study_id_formated
+  nmds_df$study_id_formated <- rownames(nmds_df)
+  # Agregar study_id_formated como columna
+met_phy$study_id_formated <- rownames(met_phy)
+
+# Merge
+merged_data_mds <- merge(met_phy, nmds_df, by = "study_id_formated")
+  # Merge con metadata
+
+  
+  # p-value y R2
+  pval <- round(mod_adonis$`Pr(>F)`[1], 3)
+  r2 <- round(mod_adonis$R2[1] * 100, 1)
+  
+  # Plot NMDS
+  p <- ggplot(merged_data_mds, aes(x = NMDS1, y = NMDS2, color = severe_3cat)) +
+    geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+    geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+scale_color_manual(values = c("control"= "#5a9bd4", "Yes" = "red", "No" = "orange"))+
+
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+    ggtitle(paste0("NMDS - ", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf,
+             label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+    
+  
+  # Guardar plot
+  output_plot <- file.path("res/beta/severe_3cat_NMDS", fecha_hoy, paste0("NMDS_", method, ".pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 5)
+  
+  # Print
+  print(mod_adonis)
+  print(p)
+}
+```
+#NMDS severe 3cats + stoolDay
+```{r}
+# Load phyloseq object
+phy <- PHY_fil_rar_alpha_meco
+
+
+# Remove NA and "control" from severe_3cat
+phy <- subset_samples(phy, !is.na(severe_3cat))
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+# Extract metadata
+met_phy <- data.frame(sample_data(phy))
+# rownames(met_phy) <- met_phy$study_id_formated # A veces es mejor asignar los rownames al final para evitar errores
+
+# Métodos de distancia
+distance_methods <- c("bray", "jaccard")
+
+# Crear carpeta con fecha
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+dir_path <- file.path("res/beta/severe_3cat_NMDS", fecha_hoy)
+dir.create(dir_path, showWarnings = FALSE, recursive = TRUE)
+
+# Loop
+for (method in distance_methods) {
+  
+  # Calcular matriz de distancia
+  if (method == "jaccard") {
+    phy_use <- phy
+  } else {
+    # El pseudo-count de +1 se hace para distancias como Bray-Curtis para evitar ceros
+    phy_use <- transform_sample_counts(phy, function(x) x + 1) 
+  }
+  dist_matrix <- phyloseq::distance(phy_use, method = method, binary = (method == "jaccard"))  
+  
+  # Asegurar que los rownames de met_phy coincidan con el orden de la matriz de distancia
+  met_phy <- met_phy[match(labels(dist_matrix), rownames(met_phy)), ]
+
+  # Modelo Adonis
+  set.seed(711)
+  mod_adonis <- tryCatch(
+    vegan::adonis2(dist_matrix ~ severe_3cat + days_stool1, data = met_phy, permutations = 999, by = "margin"),
+    error = function(e) e
+  )
+  
+  # Guardar resultados de Adonis
+  mod_adonis_df <- as.data.frame(mod_adonis)
+  output_csv <- file.path(dir_path, paste0("adonis_", method, "_day_stool.csv"))
+  write.csv(mod_adonis_df, file = output_csv, row.names = TRUE)
+  
+  # NUEVO: Realizar PERMANOVA por pares si el término principal es significativo
+  # Extraemos el valor p para el factor 'severe_3cat'
+  p_val_severe_3cat <- mod_adonis_df["severe_3cat", "Pr(>F)"]
+
+  # Chequeamos si el p-valor es significativo
+  if (!is.na(p_val_severe_3cat) && p_val_severe_3cat < 0.05) {
+      
+      print(paste("Para el método", method, "el efecto de 'severe_3cat' es significativo. Realizando PERMANOVA por pares..."))
+      
+      # Realizar la prueba por pares para el factor 'severe_3cat'
+      # p.adjust.m = "BH" aplica el método de Benjamini-Hochberg para ajustar los p-values
+      set.seed(711)
+      pairwise_mod <- pairwise.adonis(x = dist_matrix, factors = met_phy$severe_3cat, p.adjust.m = "BH")
+      
+      # Mostrar resultados en la consola
+      print(pairwise_mod)
+      
+      # Guardar los resultados de la prueba por pares
+      output_pairwise_csv <- file.path(dir_path, paste0("pairwise_adonis_", method, ".csv"))
+      write.csv(as.data.frame(pairwise_mod), file = output_pairwise_csv, row.names = TRUE)
+
+  } else {
+      print(paste("Para el método", method, "el efecto de 'severe_3cat' no fue significativo. No se realizarán comparaciones por pares."))
+  }
+
+  # Realizar NMDS
+  set.seed(711)
+  nmds_result <- vegan::metaMDS(dist_matrix, k = 2, trymax = 100)
+  nmds_df <- as.data.frame(nmds_result$points)
+  colnames(nmds_df) <- c("NMDS1", "NMDS2")
+  nmds_df$study_id_formated <- rownames(nmds_df)
+  
+  # Merge con metadata
+  # Primero, nos aseguramos de que met_phy tiene la columna para el merge
+  met_phy$study_id_formated <- rownames(met_phy)
+  merged_data_mds <- merge(met_phy, nmds_df, by = "study_id_formated")
+  
+  # p-value y R2 del factor de interés para el plot
+  pval <- round(p_val_severe_3cat, 3)
+  r2 <- round(mod_adonis_df["severe_3cat", "R2"] * 100, 1)
+  
+  # Plot NMDS
+  p <- ggplot(merged_data_mds, aes(x = NMDS1, y = NMDS2, color = severe_3cat)) +
+    geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+    geom_point(size = 5, alpha = 1) +
+    stat_ellipse(type = "norm", level = 0.95) +
+    scale_color_manual(values = c("control"= "#5a9bd4", "Yes" = "red", "No" = "orange")) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1),
+      axis.text = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      strip.text.x = element_text(size = 12)
+    ) +
+    ggtitle(paste0("NMDS - ", toupper(method), " distances for stool samples")) +
+    annotate("text", x = Inf, y = Inf,
+             label = paste("p-value (severe_3cat) =", pval, "\nR2 =", r2, "%"),
+             hjust = 1.1, vjust = 1.1, size = 3.5, color = "black")
+  
+  # Guardar plot
+  output_plot <- file.path(dir_path, paste0("NMDS_", method, "_day_stool.pdf"))
+  ggsave(output_plot, plot = p, width = 6, height = 5)
+  
+  # Print
+  print(mod_adonis)
+  print(p)
+}
+```
+#Masslin all levels study_group
+
+
+```{r}
+library(phyloseq)
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+library(ggplot2)
+
+# Set working directory
+# Load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+#remove control from study_group from phy
+#phy <- subset_samples(phy, study_group != "control")
+bs = "sg_bw_unique"
+# phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+#phy <- subset_samples( phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+#phy= subset_samples(phy, study_group!="control")
+
+
+# Define taxonomic levels to analyze
+tax_levels <- c("Species", "Genus", "Family", "Class", "Order", "Phylum")
+
+# Date for output folder
+today <- Sys.Date()
+
+# Process ASV level (no taxonomic agglomeration)
+cat("Processing ASV\n")
+phy_level <- phy
+phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+perc_samples <- 0.20
+phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+abundance_threshold <- 15
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+taxa_names(phy_fil) <- make.unique(taxa_names(phy_fil))
+
+# Extract OTU table, metadata, and taxonomy
+otu_table <- as.data.frame(t(otu_table(phy_fil)))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+# Define output directory
+output_dir <- paste0("res/maaslin/", today, "/", bs, "/ASV_study_group_20prev_sig0_25_ab15per_unique")
+dir.create(output_dir, recursive = TRUE)
+
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+        #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "study_group"),
+
+     # fixed_effects = c("study_group","baby_weight", "mod"),
+ # reference = c("study_group","control"),
+  random_effects = NULL,
+  normalization = "TSS",
+  max_significance = 0.25,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  min_abundance = 0,
+  min_prevalence = 0
+)
+
+# Asegurarse de que cada especie "Unclassified" sea única
+# Convert tax_table to data frame
+tax_df <- as.data.frame(tax_table(phy))
+
+# Revisar si existe la columna Species
+if ("Species" %in% colnames(tax_df)) {
+  
+  # Hacer únicos los Species que terminan en Unclassified
+  tax_df$Species <- ifelse(
+    grepl("_s__Unclassified$", tax_df$Species),
+    paste0(tax_df$Species, "_", taxa_names(phy)),
+    tax_df$Species
+  )
+  
+  # Reconvertir a matriz y reinsertarlo en el objeto phyloseq
+  tax_table(phy) <- tax_table(as.matrix(tax_df))
+  
+} else {
+  stop("Species column not found in tax_table!")
+}
+
+for (tax_level in tax_levels) {
+  cat("Processing", tax_level, "\n")
+  
+  # Aggregate data if necessary
+  phy_level <- tax_glom(phy, taxrank = tax_level)
+  
+  # Transform to relative abundance
+  phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence and abundance
+  phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+  
+  # Ensure unique taxa names
+  taxa_names(phy_fil) <- make.unique(tax_table(phy_fil)[, tax_level])
+  
+  # Extract OTU table, metadata, and taxonomy
+  otu_table <- as.data.frame(t(otu_table(phy_fil)))
+  sample_metadata <- as(sample_data(phy_fil), "data.frame")
+  
+  # Define output directory
+  output_dir <- paste0("res/maaslin/", today, "/", bs, "/", tax_level, "_study_group_20prev_sig0_25_ab15per_unique")
+  dir.create(output_dir, recursive = TRUE)
+  
+  # Run MaAsLin2
+  fit_data <- Maaslin2(
+    input_data = otu_table, 
+    input_metadata = sample_metadata, 
+    output = output_dir,
+      #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "study_group"),
+    random_effects = NULL,
+    normalization = "TSS",
+    max_significance = 0.25, 
+    transform = "LOG", 
+    analysis_method = "LM", 
+    correction = "BH", 
+    standardize = TRUE,
+    min_abundance = 0,
+    min_prevalence = 0
+  )
+  
+  # Load results
+  results_file <- paste0(output_dir, "/all_results.tsv")
+  if (file.exists(results_file)) {
+    maaslin_results <- read.table(results_file, header = TRUE, sep = "\t")
+    
+    # Filter significant results
+#    significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+     #   significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+                significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'severe' & value == 'PE')
+
+
+    significant_results <- significant_results[order(significant_results$coef, decreasing = TRUE), ]
+    significant_results$feature <- factor(significant_results$feature, levels = significant_results$feature)
+    
+    # Create coefficient plot
+    p <- ggplot(significant_results, aes(x = feature, y = coef)) +
+      geom_point() +
+      geom_errorbar(aes(ymin = coef - stderr, ymax = coef + stderr), width = 0.2, color = "red") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+      labs(title = paste("Significant Coeff (", tax_level, " Study Group: PE, pval < 0.25)", sep = ""),
+           x = "Feature", y = "Coefficient") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    
+    # Save plot
+    output_plot <- paste0(output_dir, "/coef_plot_PE_study_group_significant_ordered.pdf")
+    ggsave(output_plot, plot = p, width = 6, height = 4)
+  }
+}
+
+cat("Analysis completed!\n")
+```
+
+# Maaslin all levels severe
+
+```{r}
+library(phyloseq)
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+library(ggplot2)
+
+# Set working directory
+# Load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+#remove control from severe_3cat from phy
+phy <- subset_samples(phy, severe_3cat != "control")
+bs = "severe_2cat"
+# phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+#phy <- subset_samples( phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+#phy= subset_samples(phy, severe_3cat!="control")
+
+
+# Define taxonomic levels to analyze
+tax_levels <- c("Species", "Genus", "Family", "Class", "Order", "Phylum")
+
+# Date for output folder
+today <- Sys.Date()
+
+# Process ASV level (no taxonomic agglomeration)
+cat("Processing ASV\n")
+phy_level <- phy
+phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+perc_samples <- 0.20
+phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+abundance_threshold <- 15
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+taxa_names(phy_fil) <- make.unique(taxa_names(phy_fil))
+
+# Extract OTU table, metadata, and taxonomy
+otu_table <- as.data.frame(t(otu_table(phy_fil)))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+# Define output directory
+output_dir <- paste0("res/maaslin/", today, "/", bs, "/ASV_study_group_20prev_sig0_25_ab15per_unique")
+dir.create(output_dir, recursive = TRUE)
+
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+        #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "severe_3cat"),
+
+     # fixed_effects = c("study_group","baby_weight", "mod"),
+ # reference = c("severe_3cat","control"),
+  random_effects = NULL,
+  normalization = "TSS",
+  max_significance = 0.25,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  min_abundance = 0,
+  min_prevalence = 0
+)
+
+# Asegurarse de que cada especie "Unclassified" sea única
+# Convert tax_table to data frame
+tax_df <- as.data.frame(tax_table(phy))
+
+# Revisar si existe la columna Species
+if ("Species" %in% colnames(tax_df)) {
+  
+  # Hacer únicos los Species que terminan en Unclassified
+  tax_df$Species <- ifelse(
+    grepl("_s__Unclassified$", tax_df$Species),
+    paste0(tax_df$Species, "_", taxa_names(phy)),
+    tax_df$Species
+  )
+  
+  # Reconvertir a matriz y reinsertarlo en el objeto phyloseq
+  tax_table(phy) <- tax_table(as.matrix(tax_df))
+  
+} else {
+  stop("Species column not found in tax_table!")
+}
+
+for (tax_level in tax_levels) {
+  cat("Processing", tax_level, "\n")
+  
+  # Aggregate data if necessary
+  phy_level <- tax_glom(phy, taxrank = tax_level)
+  
+  # Transform to relative abundance
+  phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence and abundance
+  phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+  
+  # Ensure unique taxa names
+  taxa_names(phy_fil) <- make.unique(tax_table(phy_fil)[, tax_level])
+  
+  # Extract OTU table, metadata, and taxonomy
+  otu_table <- as.data.frame(t(otu_table(phy_fil)))
+  sample_metadata <- as(sample_data(phy_fil), "data.frame")
+  
+  # Define output directory
+  output_dir <- paste0("res/maaslin/", today, "/", bs, "/", tax_level, "_study_group_20prev_sig0_25_ab15per_unique")
+  dir.create(output_dir, recursive = TRUE)
+  
+  # Run MaAsLin2
+  fit_data <- Maaslin2(
+    input_data = otu_table, 
+    input_metadata = sample_metadata, 
+    output = output_dir,
+      #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "severe_3cat"),
+
+#    fixed_effects = c("study_group","baby_weight", "mod"),
+      #  fixed_effects = c("study_group","bmi", "antibiotics_during_pregnancy"),
+           # fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy","ethnicity"),
+
+# fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy"),
+   #     fixed_effects = c("study_group"),
+  #reference = c("severe_3cat","control"),
+
+    random_effects = NULL,
+    normalization = "TSS",
+    max_significance = 0.25, 
+    transform = "LOG", 
+    analysis_method = "LM", 
+    correction = "BH", 
+    standardize = TRUE,
+    min_abundance = 0,
+    min_prevalence = 0
+  )
+  
+  # Load results
+  results_file <- paste0(output_dir, "/all_results.tsv")
+  if (file.exists(results_file)) {
+    maaslin_results <- read.table(results_file, header = TRUE, sep = "\t")
+    
+    # Filter significant results
+#    significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+     #   significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+                significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'severe' & value == 'PE')
+
+
+    significant_results <- significant_results[order(significant_results$coef, decreasing = TRUE), ]
+    significant_results$feature <- factor(significant_results$feature, levels = significant_results$feature)
+    
+    # Create coefficient plot
+    p <- ggplot(significant_results, aes(x = feature, y = coef)) +
+      geom_point() +
+      geom_errorbar(aes(ymin = coef - stderr, ymax = coef + stderr), width = 0.2, color = "red") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+      labs(title = paste("Significant Coeff (", tax_level, " Study Group: PE, pval < 0.25)", sep = ""),
+           x = "Feature", y = "Coefficient") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    
+    # Save plot
+    output_plot <- paste0(output_dir, "/coef_plot_PE_study_group_significant_ordered.pdf")
+    ggsave(output_plot, plot = p, width = 6, height = 4)
+  }
+}
+
+cat("Analysis completed!\n")
+```
+
+# Maaslin all levels severe 3 categories reales
+
+```{r}
+library(phyloseq)
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+library(ggplot2)
+
+# Set working directory
+# Load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+#remove control from severe_3cat from phy
+#phy <- subset_samples(phy, severe_3cat != "control")
+bs = "severe_3cat_reales"
+# phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+#phy <- subset_samples( phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+#phy= subset_samples(phy, severe_3cat!="control")
+
+
+# Define taxonomic levels to analyze
+tax_levels <- c("Species", "Genus", "Family", "Class", "Order", "Phylum")
+
+# Date for output folder
+today <- Sys.Date()
+
+# Process ASV level (no taxonomic agglomeration)
+cat("Processing ASV\n")
+phy_level <- phy
+phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+perc_samples <- 0.20
+phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+abundance_threshold <- 15
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+taxa_names(phy_fil) <- make.unique(taxa_names(phy_fil))
+
+# Extract OTU table, metadata, and taxonomy
+otu_table <- as.data.frame(t(otu_table(phy_fil)))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+# Define output directory
+output_dir <- paste0("res/maaslin/", today, "/", bs, "/ASV_study_group_20prev_sig0_25_ab15per_unique")
+dir.create(output_dir, recursive = TRUE)
+
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+        #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "severe_3cat"),
+
+     # fixed_effects = c("study_group","baby_weight", "mod"),
+  reference = c("severe_3cat","control"),
+  random_effects = NULL,
+  normalization = "TSS",
+  max_significance = 0.25,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  min_abundance = 0,
+  min_prevalence = 0
+)
+
+# Asegurarse de que cada especie "Unclassified" sea única
+# Convert tax_table to data frame
+tax_df <- as.data.frame(tax_table(phy))
+
+# Revisar si existe la columna Species
+if ("Species" %in% colnames(tax_df)) {
+  
+  # Hacer únicos los Species que terminan en Unclassified
+  tax_df$Species <- ifelse(
+    grepl("_s__Unclassified$", tax_df$Species),
+    paste0(tax_df$Species, "_", taxa_names(phy)),
+    tax_df$Species
+  )
+  
+  # Reconvertir a matriz y reinsertarlo en el objeto phyloseq
+  tax_table(phy) <- tax_table(as.matrix(tax_df))
+  
+} else {
+  stop("Species column not found in tax_table!")
+}
+
+for (tax_level in tax_levels) {
+  cat("Processing", tax_level, "\n")
+  
+  # Aggregate data if necessary
+  phy_level <- tax_glom(phy, taxrank = tax_level)
+  
+  # Transform to relative abundance
+  phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence and abundance
+  phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+  
+  # Ensure unique taxa names
+  taxa_names(phy_fil) <- make.unique(tax_table(phy_fil)[, tax_level])
+  
+  # Extract OTU table, metadata, and taxonomy
+  otu_table <- as.data.frame(t(otu_table(phy_fil)))
+  sample_metadata <- as(sample_data(phy_fil), "data.frame")
+  
+  # Define output directory
+  output_dir <- paste0("res/maaslin/", today, "/", bs, "/", tax_level, "_severe3cat_20prev_sig0_25_ab15per_unique")
+  dir.create(output_dir, recursive = TRUE)
+  
+  # Run MaAsLin2
+  fit_data <- Maaslin2(
+    input_data = otu_table, 
+    input_metadata = sample_metadata, 
+    output = output_dir,
+      #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "severe_3cat"),
+  reference = c("severe_3cat","control"),
+
+    random_effects = NULL,
+    normalization = "TSS",
+    max_significance = 0.25, 
+    transform = "LOG", 
+    analysis_method = "LM", 
+    correction = "BH", 
+    standardize = TRUE,
+    min_abundance = 0,
+    min_prevalence = 0
+  )
+  
+  # Load results
+  results_file <- paste0(output_dir, "/all_results.tsv")
+  if (file.exists(results_file)) {
+    maaslin_results <- read.table(results_file, header = TRUE, sep = "\t")
+                significant_results <- subset(maaslin_results, pval < 0.05)
+
+
+    significant_results <- significant_results[order(significant_results$coef, decreasing = TRUE), ]
+    significant_results$feature <- factor(significant_results$feature, levels = significant_results$feature)
+    
+    # Create coefficient plot
+    p <- ggplot(significant_results, aes(x = feature, y = coef)) +
+      geom_point() +
+      geom_errorbar(aes(ymin = coef - stderr, ymax = coef + stderr), width = 0.2, color = "red") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+      labs(title = paste("Significant Coeff (", tax_level, " Study Group: PE, pval < 0.25)", sep = ""),
+           x = "Feature", y = "Coefficient") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    
+    # Save plot
+    output_plot <- paste0(output_dir, "/coef_plot_PE_study_group_significant_ordered.pdf")
+    ggsave(output_plot, plot = p, width = 6, height = 4)
+  }
+}
+
+```
+# Maaslin all levels severe +stoolday
+```{r}
+library(phyloseq)
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+library(ggplot2)
+
+# Set working directory
+# Load phyloseq object
+phy = PHY_fil_rar_alpha_meco
+
+#remove NA severe from phy
+phy <- subset_samples(phy, !is.na(study_group))
+phy <- subset_samples(phy, !is.na(days_stool1))
+
+#remove control from severe_3cat from phy
+phy <- subset_samples(phy, severe_3cat != "control")
+bs = "severe_2cat_stoolday"
+# phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+#phy <- subset_samples( phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+#phy= subset_samples(phy, severe_3cat!="control")
+
+
+# Define taxonomic levels to analyze
+tax_levels <- c("Species", "Genus", "Family", "Class", "Order", "Phylum")
+
+# Date for output folder
+today <- Sys.Date()
+
+# Process ASV level (no taxonomic agglomeration)
+cat("Processing ASV\n")
+phy_level <- phy
+phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+perc_samples <- 0.20
+phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+abundance_threshold <- 15
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+taxa_names(phy_fil) <- make.unique(taxa_names(phy_fil))
+
+# Extract OTU table, metadata, and taxonomy
+otu_table <- as.data.frame(t(otu_table(phy_fil)))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+# Define output directory
+output_dir <- paste0("res/maaslin/", today, "/", bs, "/ASV_study_group_20prev_sig0_25_ab15per_unique")
+dir.create(output_dir, recursive = TRUE)
+
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+        #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("days_stool1", "severe_3cat"),
+
+     # fixed_effects = c("study_group","baby_weight", "mod"),
+ # reference = c("severe_3cat","control"),
+  random_effects = NULL,
+  normalization = "TSS",
+  max_significance = 0.25,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  min_abundance = 0,
+  min_prevalence = 0
+)
+
+# Asegurarse de que cada especie "Unclassified" sea única
+# Convert tax_table to data frame
+tax_df <- as.data.frame(tax_table(phy))
+
+# Revisar si existe la columna Species
+if ("Species" %in% colnames(tax_df)) {
+  
+  # Hacer únicos los Species que terminan en Unclassified
+  tax_df$Species <- ifelse(
+    grepl("_s__Unclassified$", tax_df$Species),
+    paste0(tax_df$Species, "_", taxa_names(phy)),
+    tax_df$Species
+  )
+  
+  # Reconvertir a matriz y reinsertarlo en el objeto phyloseq
+  tax_table(phy) <- tax_table(as.matrix(tax_df))
+  
+} else {
+  stop("Species column not found in tax_table!")
+}
+
+for (tax_level in tax_levels) {
+  cat("Processing", tax_level, "\n")
+  
+  # Aggregate data if necessary
+  phy_level <- tax_glom(phy, taxrank = tax_level)
+  
+  # Transform to relative abundance
+  phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence and abundance
+  phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+  
+  # Ensure unique taxa names
+  taxa_names(phy_fil) <- make.unique(tax_table(phy_fil)[, tax_level])
+  
+  # Extract OTU table, metadata, and taxonomy
+  otu_table <- as.data.frame(t(otu_table(phy_fil)))
+  sample_metadata <- as(sample_data(phy_fil), "data.frame")
+  
+  # Define output directory
+  output_dir <- paste0("res/maaslin/", today, "/", bs, "/", tax_level, "_study_group_20prev_sig0_25_ab15per_unique")
+  dir.create(output_dir, recursive = TRUE)
+  
+  # Run MaAsLin2
+  fit_data <- Maaslin2(
+    input_data = otu_table, 
+    input_metadata = sample_metadata, 
+    output = output_dir,
+      #  fixed_effects = c("study_group","baby_weight"),
+          fixed_effects = c("baby_weight", "severe_3cat"),
+
+#    fixed_effects = c("study_group","baby_weight", "mod"),
+      #  fixed_effects = c("study_group","bmi", "antibiotics_during_pregnancy"),
+           # fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy","ethnicity"),
+
+# fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy"),
+   #     fixed_effects = c("study_group"),
+  #reference = c("severe_3cat","control"),
+
+    random_effects = NULL,
+    normalization = "TSS",
+    max_significance = 0.25, 
+    transform = "LOG", 
+    analysis_method = "LM", 
+    correction = "BH", 
+    standardize = TRUE,
+    min_abundance = 0,
+    min_prevalence = 0
+  )
+  
+  # Load results
+  results_file <- paste0(output_dir, "/all_results.tsv")
+  if (file.exists(results_file)) {
+    maaslin_results <- read.table(results_file, header = TRUE, sep = "\t")
+    
+    # Filter significant results
+#    significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+     #   significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+                significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'severe' & value == 'PE')
+
+
+    significant_results <- significant_results[order(significant_results$coef, decreasing = TRUE), ]
+    significant_results$feature <- factor(significant_results$feature, levels = significant_results$feature)
+    
+    # Create coefficient plot
+    p <- ggplot(significant_results, aes(x = feature, y = coef)) +
+      geom_point() +
+      geom_errorbar(aes(ymin = coef - stderr, ymax = coef + stderr), width = 0.2, color = "red") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+      labs(title = paste("Significant Coeff (", tax_level, " Study Group: PE, pval < 0.25)", sep = ""),
+           x = "Feature", y = "Coefficient") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    
+    # Save plot
+    output_plot <- paste0(output_dir, "/coef_plot_PE_study_group_significant_ordered.pdf")
+    ggsave(output_plot, plot = p, width = 6, height = 4)
+  }
+}
+
+cat("Analysis completed!\n")
+
+```
+# Network
+
+```{r}
+library(phyloseq)
+library(igraph)
+# Load phyloseq object
+phyloseq_obj <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/bb_phy_mtph_gtdb.rds")
+# Load necessary libraries
+
+
+# Filter the phyloseq object for abundance and prevalence thresholds
+phyloseq_filtered <- prune_taxa(taxa_sums(phyloseq_obj) > 2, phyloseq_obj)
+phyloseq_filtered <- prune_samples(sample_sums(phyloseq_filtered) > 2, phyloseq_filtered)
+
+# Split the data into PE and Control groups
+pe_samples <- subset_samples(phyloseq_filtered, study_group == "PE")
+control_samples <- subset_samples(phyloseq_filtered, study_group == "Control")
+
+# Transform to relative abundance
+pe_rel <- transform_sample_counts(pe_samples, function(x) x / sum(x))
+control_rel <- transform_sample_counts(control_samples, function(x) x / sum(x))
+
+# Extract the OTU tables
+pe_otu <- t(as.matrix(otu_table(pe_rel)))  # Transpose to get species as columns
+control_otu <- t(as.matrix(otu_table(control_rel)))  # Transpose to get species as columns
+
+# Check for taxa with zero variance in the PE group
+pe_variances <- apply(pe_otu, 2, var)
+constant_taxa <- names(pe_variances[pe_variances == 0])
+
+# Remove taxa with zero variance from the PE group
+pe_otu_filtered <- pe_otu[, !(colnames(pe_otu) %in% constant_taxa)]
+
+# Recalculate Pearson correlations for the filtered PE group
+pe_corr_matrix_filtered <- cor(pe_otu_filtered, method = "pearson")
+control_corr_matrix <- cor(control_otu, method = "pearson")
+
+# Apply threshold of 0.4
+pe_corr_matrix_filtered[abs(pe_corr_matrix_filtered) < 0.4] <- 0
+control_corr_matrix[abs(control_corr_matrix) < 0.4] <- 0
+
+# Create graphs
+pe_graph_filtered <- graph.adjacency(pe_corr_matrix_filtered, mode = "undirected", weighted = TRUE, diag = FALSE)
+control_graph <- graph.adjacency(control_corr_matrix, mode = "undirected", weighted = TRUE, diag = FALSE)
+
+# Set edge colors based on correlation sign
+E(pe_graph_filtered)$color <- ifelse(E(pe_graph_filtered)$weight > 0, "darkgreen", "red")
+E(control_graph)$color <- ifelse(E(control_graph)$weight > 0, "darkgreen", "red")
+
+# Set edge width based on absolute correlation value
+E(pe_graph_filtered)$width <- abs(E(pe_graph_filtered)$weight) * 3
+E(control_graph)$width <- abs(E(control_graph)$weight) * 3
+
+# Calculate layout beforehand
+set.seed(123)  # for reproducibility
+pe_layout_filtered <- layout_nicely(pe_graph_filtered)
+control_layout <- layout_nicely(control_graph)
+
+# Create plots
+pdf("network_plots_combined_with_filtering.pdf", width = 20, height = 10)
+par(mfrow = c(1, 2), mar = c(1, 1, 2, 1))
+
+# Filtered PE Network
+plot(pe_graph_filtered, 
+     main = "Filtered PE Network\
+(|correlation| > 0.4)\
+Green: positive, Red: negative", 
+     vertex.color = "lightblue",
+     vertex.size = 8,
+     vertex.label.cex = 1.5,
+     vertex.label.dist = 0.8,
+     layout = pe_layout_filtered)
+
+# Control Network
+plot(control_graph, 
+     main = "Control Network\
+(|correlation| > 0.4)\
+Green: positive, Red: negative", 
+     vertex.color = "lightblue",
+     vertex.size = 8,
+     vertex.label.cex = 1.5,
+     vertex.label.dist = 0.8,
+     layout = control_layout)
+
+dev.off()
+
+# Print summary of correlations
+print("Summary of correlations with |0.4| threshold:")
+print("\
+Filtered PE Network:")
+print(paste("Positive correlations (>0.4):", sum(pe_corr_matrix_filtered > 0.4)))
+print(paste("Negative correlations (<-0.4):", sum(pe_corr_matrix_filtered < -0.4)))
+
+print("\
+Control Network:")
+print(paste("Positive correlations (>0.4):", sum(control_corr_matrix > 0.4)))
+print(paste("Negative correlations (<-0.4):", sum(control_corr_matrix < -0.4)))
+
+# Print the negative correlations in Control network
+print("\
+Negative correlations in Control network:")
+neg_pairs <- which(control_corr_matrix < -0.4, arr.ind = TRUE)
+if(nrow(neg_pairs) > 0) {
+    for(i in 1:nrow(neg_pairs)) {
+        if(neg_pairs[i,1] < neg_pairs[i,2]) {  # avoid printing duplicates
+            species1 <- rownames(control_corr_matrix)[neg_pairs[i,1]]
+            species2 <- colnames(control_corr_matrix)[neg_pairs[i,2]]
+            corr_val <- control_corr_matrix[neg_pairs[i,1], neg_pairs[i,2]]
+            print(sprintf("%s vs %s: %.3f", species1, species2, corr_val))
+        }
+    }
+} else {
+    print("No negative correlations found with threshold < -0.4")
+}
+```
+
+# Days stool 1
+
+```{r}
+ phylo_data <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/bb_phy_mtph_gtdb.rds")
+# # Calculate Bray-Curtis distance matrix
+# distance_matrix <- phyloseq::distance(phylo_data, method = "bray")
+# 
+# 
+# # Calculate the variance explained by the first two axes
+# variance_explained <- ordination$values$Relative_eig[1:2] * 100
+# print(paste("Variance explained by PC1:", round(variance_explained[1], 2), "%"))
+# print(paste("Variance explained by PC2:", round(variance_explained[2], 2), "%"))
+# # Get the sample data
+# metadata <- data.frame(sample_data(phylo_data))
+# 
+# # Remove any NA values in days_stool1
+# complete_samples <- !is.na(metadata$days_stool1)
+# metadata_clean <- metadata[complete_samples, ]
+# 
+# # Subset the distance matrix to match
+# dist_matrix <- as.matrix(distance_matrix)[complete_samples, complete_samples]
+# dist_matrix <- as.dist(dist_matrix)
+# 
+# # Now run PERMANOVA with adonis2
+# permanova_result <- adonis2(dist_matrix ~ days_stool1*study_group, data = metadata_clean)
+# 
+# # Display results
+# print(permanova_result)
+# 
+# # And display the updated plot again
+# pcoa_plot <- phyloseq::plot_ordination(phylo_data, ordination, color = "days_stool1") +
+#   ggtitle("Beta Diversity (Bray-Curtis) by Days Stool 1") +
+#   theme_minimal() +
+#   scale_color_viridis_c(option = "plasma", name = "Days after birth for meconium collection") +
+#   geom_point(size = 4) +
+#   theme(legend.position = "right",
+#         axis.title = element_text(size = 12),
+#         axis.text = element_text(size = 10),
+#         legend.title = element_text(size = 12),
+#         legend.text = element_text(size = 10))
+# 
+# print(pcoa_plot)
+# 
+# 
+# #ALPHA
+# # First, let's check if we have the 'sha' variable and see what it looks like
+# metadata <- data.frame(sample_data(phylo_data))
+# print("Checking if 'sha' exists in our metadata:")
+# print('sha' %in% colnames(metadata))
+# 
+# # Let's see all columns that contain 'sha' in case it's named differently
+# sha_cols <- grep("sha", colnames(metadata), value = TRUE, ignore.case = TRUE)
+# print("\
+# Columns containing 'sha':")
+# print(sha_cols)
+# 
+# # Remove rows with NA values in 'sha' or 'days_stool1'
+# metadata_clean <- metadata[!is.na(metadata$sha) & !is.na(metadata$days_stool1), ]
+# 
+# # Perform linear correlation
+# correlation_result <- cor.test(metadata_clean$sha, metadata_clean$days_stool1, method = "pearson")
+# 
+# # Display the correlation result
+# print(correlation_result)
+# 
+# # Create a scatter plot with linear regression line
+# library(ggplot2)
+# 
+# ggplot(metadata_clean, aes(x = days_stool1, y = sha)) +
+#   geom_point(size = 4, alpha = 0.6) +
+#   geom_smooth(method = "lm", color = "red", se = TRUE) +
+#   theme_minimal() +
+#   labs(title = "Shannon Diversity vs Days Stool 1",
+#        x = "Days after birth for meconium collection",
+#        y = "Shannon Diversity Index") +
+#   theme(axis.title = element_text(size = 12),
+#         axis.text = element_text(size = 10),
+#         title = element_text(size = 14))
+# 
+# # Calculate summary statistics
+# summary_stats <- summary(metadata_clean$sha)
+# print("\
+# Summary statistics for Shannon diversity:")
+# print(summary_stats)
+# 
+# 
+# # Group data by study_group and calculate correlation
+# correlation_results <- metadata_clean %>%
+#   group_by(study_group) %>%
+#   summarise(correlation = cor(days_stool1, sha, method = "pearson", use = "complete.obs"),
+#             p_value = cor.test(days_stool1, sha, method = "pearson")$p.value)
+# 
+# # Display correlation results
+# print("Correlation results by study_group:")
+# print(correlation_results)
+# 
+# # Create scatter plots with regression lines for each study_group
+# ggplot(metadata_clean, aes(x = days_stool1, y = sha, color = study_group)) +
+#   geom_point(size = 4, alpha = 0.6) +
+#   geom_smooth(method = "lm", se = TRUE) +
+#   theme_minimal() +
+#   labs(title = "Shannon Diversity vs Days Stool 1 by Study Group",
+#        x = "Days after birth for meconium collection",
+#        y = "Shannon Diversity Index") +
+#   theme(axis.title = element_text(size = 12),
+#         axis.text = element_text(size = 10),
+#         title = element_text(size = 14),
+#         legend.title = element_text(size = 12),
+#         legend.text = element_text(size = 10))
+# 
+# 
+# 
+# # Group data by study_group and calculate correlation
+# correlation_results <- metadata_clean %>%
+#   group_by(study_group) %>%
+#   summarise(correlation = cor(days_stool1, obs, method = "pearson", use = "complete.obs"),
+#             p_value = cor.test(days_stool1, obs, method = "pearson")$p.value)
+# 
+# # Display correlation results
+# print("Correlation results by study_group:")
+# print(correlation_results)
+# 
+# # Create scatter plots with regression lines for each study_group
+# ggplot(metadata_clean, aes(x = days_stool1, y = obs, color = study_group)) +
+#   geom_point(size = 4, alpha = 0.6) +
+#   geom_smooth(method = "lm", se = TRUE) +
+#   theme_minimal() +
+#   labs(title = "Observed Diversity vs Days Stool 1 by Study Group",
+#        x = "Days after birth for meconium collection",
+#        y = "Observed Diversity Index") +
+#   theme(axis.title = element_text(size = 12),
+#         axis.text = element_text(size = 10),
+#         title = element_text(size = 14),
+#         legend.title = element_text(size = 12),
+#         legend.text = element_text(size = 10))
+```
+
+# NA vs days_tool1
+explore if missing samples has to do with the number of days in "days_stool1"
+```{r}
+# Read the met_div.csv file
+met_div <- read.csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/met/met_div.csv")
+
+# Get current metadata
+metadata <- data.frame(sample_data(phylo_data))
+
+# Create a status column based on whether sha is missing
+met_div$status <- ifelse(is.na(met_div$sha), "Missing", "Present")
+
+# Compare the distribution of days_stool1 between Missing and Present groups
+print("Summary of days_stool1 by status:")
+summary_by_status <- aggregate(days_stool1 ~ status, data = met_div, summary)
+print(summary_by_status)
+
+# Create a density plot to visualize the distributions
+ggplot(met_div, aes(x = days_stool1, fill = status)) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Distribution of days_stool1 by Missing vs Present Samples",
+       x = "Days Stool 1",
+       y = "Density") +
+  theme(legend.position = "right")
+
+#test
+# Convert status to a binary variable (1 = Present, 0 = Missing)
+met_div$status_binary <- ifelse(met_div$status == "Present", 1, 0)
+
+# Fit logistic regression model
+logit_model <- glm(status_binary ~ days_stool1, data = met_div, family = binomial)
+
+# Summarize the model
+summary_logit <- summary(logit_model)
+print("Logistic regression model summary:")
+print(summary_logit)
+
+# Extract odds ratio and confidence intervals
+odds_ratios <- exp(cbind(OR = coef(logit_model), confint(logit_model)))
+print("\
+Odds ratios and confidence intervals:")
+print(odds_ratios)
+
+```
+# NA diagram
+
+```{r}
+# Install the necessary packages if you haven't already:
+# install.packages("DiagrammeR")
+# install.packages("DiagrammeRsvg")
+# install.packages("rsvg")
+
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+
+# Define your flowchart using grViz
+flowchart_code <- "
+digraph flowchart {
+  graph [layout = dot, rankdir = TB]
+  node [fontname = Helvetica, shape = box, style=filled]
+
+  # Start Node
+  A [label = 'Start: 100 Meconium Samples', fillcolor=Khaki]
+
+  # Process Steps (Blue)
+  B [label = 'Shotgun Sequencing', fillcolor=LightBlue]
+  E [label = 'Kneaddata Processing\n(Remove human sequences)', fillcolor=LightBlue]
+  H [label = 'MetaPhlAn4 Processing\n(Taxonomic profiling)', fillcolor=LightBlue]
+  K [label = 'Taxonomic Classification', fillcolor=LightBlue]
+
+  # Successful Samples (Yellow)
+  C [label = '96 Successfully Sequenced', fillcolor=Khaki]
+  F [label = '92 Successfully Processed', fillcolor=Khaki]
+  I [label = '89 Processed', fillcolor=Khaki]
+  L [label = '66 Samples Classified\n(non-Unclassified)', fillcolor=Khaki]
+
+  # Failing Samples (Red)
+  D [label = '4 Failed\n(Sequencing Issues?)', fillcolor=LightCoral]
+  G [label = '4 Failed\n (TERM_MEMLIMIT error)', fillcolor=LightCoral]
+  J [label = '3 Failed\n(Note: Memory limit issues)', fillcolor=LightCoral]
+  M [label = '23 Failed\n(100% taxa as Unclassified)', fillcolor=LightCoral]
+
+  # Arrows for Flow
+  A -> B
+  B -> C
+  B -> D
+  C -> E
+  E -> F
+  E -> G
+  F -> H
+  H -> I
+  I -> J
+  I -> K
+  K -> L
+  K -> M
+}
+"
+
+# Create the DiagrammeR graph
+graph <- grViz(flowchart_code)
+
+# Export the graph as SVG
+svg_code <- export_svg(graph)
+write(svg_code, file = "flowchart.svg")
+
+# Optionally, convert the SVG to PNG:
+rsvg_png("flowchart.svg", "flowchart.png")
+
+graph
+```
+
+#Negative control analysis
+##Bray
+```{r}
+
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/phy_obj/PHYraw.RData")
+
+     # Load phyloseq object
+phy <- PHYraw
+#glom to genus
+#phy <- tax_glom(phy, taxrank = "Genus")
+library(phyloseq)
+library(vegan)
+library(ggplot2)
+
+# Compute Bray-Curtis distance and NMDS
+phy_dist <- phyloseq::distance(phy, method = "bray")
+nmds_result <- ordinate(phy, method = "NMDS", distance = phy_dist)
+
+# Extract NMDS coordinates
+nmds_df <- as.data.frame(nmds_result$points)
+nmds_df$X.1 <- rownames(nmds_df)
+
+# Add color variable
+nmds_df$color_group <- ifelse(nmds_df$X.1 == "NEGCNTRL", "Target", "Other")
+
+# Plot
+ggplot(nmds_df, aes(x = MDS1, y = MDS2, label = X.1)) +
+  geom_point(aes(color = color_group), size = 3) +
+  geom_text(vjust = -0.5, size = 3) +
+  scale_color_manual(values = c("Target" = "red", "Other" = "gray40")) +
+  theme_bw() +
+  labs(title = "NMDS plot (Bray-Curtis distance) RAW PHYloseq",
+       x = "NMDS1", y = "NMDS2") +
+  guides(color = FALSE)  # Hide legend if not needed
+
+# Save the plot pdf
+ggsave("nmds_bray_curtis.pdf", width = 8, height = 6)
+
+```
+##Jaccard
+```{r}
+library(phyloseq)
+library(vegan)
+library(ggplot2)
+# Load phyloseq object
+phy <- PHYraw
+#glom to genus
+#phy <- tax_glom(phy, taxrank = "Genus")
+# Compute Jaccard distance
+phy_dist <- phyloseq::distance(phy, method = "jaccard", binary = TRUE)
+
+# NMDS ordination
+nmds_result <- ordinate(phy, method = "NMDS", distance = phy_dist)
+
+# Extract NMDS coordinates
+nmds_df <- as.data.frame(nmds_result$points)
+nmds_df$X.1 <- rownames(nmds_df)
+
+# Add color group to highlight NEGCNTRL
+nmds_df$color_group <- ifelse(nmds_df$X.1 == "NEGCNTRL", "Target", "Other")
+
+# Plot
+ggplot(nmds_df, aes(x = MDS1, y = MDS2, label = X.1)) +
+  geom_point(aes(color = color_group), size = 3) +
+  geom_text(vjust = -0.5, size = 3) +
+  scale_color_manual(values = c("Target" = "red", "Other" = "gray40")) +
+  theme_bw() +
+  labs(title = "NMDS plot (Jaccard distance)RAW PHYloseq",
+       x = "NMDS1", y = "NMDS2") +
+  guides(color = FALSE)
+#save plot pdf
+ggsave("nmds_jaccard.pdf", width = 8, height = 6)
+
+
+```
+#numer of sequences
+too high!!
+```{r}
+met %>% 
+  dplyr::select(num_seqs, study_id_formatted) %>% 
+  arrange(num_seqs)
+
+hist(met$num_seqs, breaks = 50, main = "Histogram of Number of Sequences", xlab = "Number of Sequences", ylab = "Frequency", col = "lightblue", border = "black")
+
+#localize rowname NEGCNTRL
+
+#curve of all samples by num_seqs by rownames
+
+
+```
+# extract Species table
+```{r}
+phy <- PHY_fil_rar_alpha_meco
+library(phyloseq)
+library(dplyr)
+library(tibble)
+
+# Aglomera por Genus
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = TRUE)
+
+#Relative abundance *100
+phy_genus <- transform_sample_counts(phy_genus, function(x) x / sum(x) * 100)
+# Extrae la tabla OTU
+otu_genus <- as.data.frame(otu_table(phy_genus))
+taxa_genus <- as.data.frame(tax_table(phy_genus))
+
+# Asegura que los nombres estén alineados
+otu_genus$Genus <- taxa_genus$Genus
+
+# Agrupa por Genus y suma las abundancias de ASVs que comparten el mismo género
+otu_genus_collapsed <- otu_genus %>%
+  group_by(Genus) %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  column_to_rownames("Genus")
+
+rownames(otu_genus_collapsed) <- gsub("^g__", "", rownames(otu_genus_collapsed))
+colnames(otu_genus_collapsed) <- gsub("^B", "", colnames(otu_genus_collapsed))
+
+# Revisa la tabla resultante
+head(otu_genus_collapsed)
+
+#save as csv
+write.csv(otu_genus_collapsed, file = "/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/meconium/16S_table_genus_for_taxa_comparison.csv", row.names = TRUE)
+```
+
+#relative abund boxplots
+
+```{r}
+phy=PHY_fil_rar_alpha_meco
+#subset phyloseq object with severe remove control
+
+phy=subset_samples(phy, severe_3cat != "control")
+
+
+
+#glom Species
+physeq_subset <- tax_glom(phy, taxrank = "Species", NArm = FALSE)
+
+#remove NA severe from phy
+physeq_subset <- subset_samples(physeq_subset, !is.na(study_group))
+ #extrat txa_table
+target_species <- c('s__Gemmiger_A_73129_qucibialis', 'g__Corynebacterium_s__Unclassified',
+                    "s__Ruminococcus_E_bromii_B", "g__Staphylococcus_s__Unclassified",
+                    "s__Corynebacterium_aurimucosum_F", "s__Bifidobacterium_longum"
+                    )
+
+# 1. Subset samples: body_site == "MomTongue"
+
+# 2. Transform counts to relative abundances por muestra
+tax_rel_abund <- transform_sample_counts(physeq_subset, function(x) x / sum(x))
+
+# 3. Crear data frame para plotear
+melted_df <- psmelt(tax_rel_abund)
+
+# 4. Filtrar por los géneros de interés
+melted_df_target <- melted_df[melted_df$Species %in% target_species, ]
+
+# 5. Asegurar que severe tenga los niveles adecuados
+melted_df_target$severe <- factor(melted_df_target$severe, levels = c('Yes', 'No'))
+
+# 6. Crear carpeta con fecha actual
+fecha_actual <- Sys.Date()
+output_dir <- paste0("res/rel_abund_boxplots/", fecha_actual)
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# 7. Paleta de colores
+palette <- c("Yes" = "red", "No" = "orange")
+# 8. Obtener géneros únicos
+especies <- unique(melted_df_target$Species)
+
+# 9. Loop para plotear cada especie
+for (esp in especies) {
+  df_plot <- filter(melted_df_target, Species == esp)
+
+  # Tamaños de muestra por grupo
+  counts <- df_plot %>%
+    group_by(severe) %>%
+    summarise(n = n(), .groups = "drop")
+
+  labels_x <- setNames(
+    paste0(counts$severe, "\n(n=", counts$n, ")"),
+    counts$severe
+  )
+
+  # Plot
+  p1 <- ggplot(df_plot, aes(x = severe, y = log(Abundance), fill = severe)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.2, size = 1.5, alpha = 0.7) +
+    scale_fill_manual(values = palette) +
+    scale_x_discrete(labels = labels_x) +
+    labs(
+      x = 'Study Group',
+      y = 'Relative Abundance',
+      title = paste('Genus:', esp)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = 'none',
+      strip.text = element_text(size = 10), 
+      axis.text.x = element_text(size = 10)
+    )
+
+  # Guardar gráfico
+  ggsave(
+    filename = paste0(output_dir, "/", gsub("[/: ]", "_", esp), "log.pdf"),
+    plot = p1,
+    width = 2,
+    height = 3.5
+  )
+}
+
+# Mostrar último plot
+print(p1)
+
+
+
+```
+#asv boxplot solo para staphylococcus que en estaba como unclassify y entonces pertenerce a un ASV en particular
+```{r}
+phy=PHY_fil_rar_alpha_meco
+
+# Assume 'phy' is your initial phyloseq object
+# phy <- PHY_fil_rar_alpha_meco
+
+# 1. Subset samples (remove controls and NAs)
+phy_subset <- subset_samples(phy, severe_3cat != "control")
+phy_subset <- subset_samples(phy_subset, !is.na(study_group))
+
+# 2. Define target ASVs
+# Replace these with the actual ASV IDs you want to plot.
+# You can get all ASV names with: all_asvs <- taxa_names(phy_subset)
+target_asvs <- c("fdc26ede960399742fbe7cfe3d2884d2", "ed210096eee65885f4e57b5f54a9b935") # <--- EDIT THIS LIST
+
+# 3. Transform counts to relative abundance
+phy_rel_abund <- transform_sample_counts(phy_subset, function(x) x / sum(x))
+
+# 4. Create a long data frame for plotting
+melted_df <- psmelt(phy_rel_abund)
+
+# 5. Filter for the target ASVs
+# We filter by the 'OTU' column, which holds the ASV identifiers
+melted_df_target <- melted_df[melted_df$OTU %in% target_asvs, ]
+
+# 6. Ensure factor levels are correct for plotting order
+melted_df_target$severe <- factor(melted_df_target$severe, levels = c('Yes', 'No'))
+
+# 7. Create output directory
+output_dir <- paste0("res/rel_abund_boxplots/", Sys.Date())
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# 8. Define color palette and get unique ASV IDs for the loop
+palette <- c("Yes" = "red", "No" = "orange")
+asv_ids <- unique(melted_df_target$OTU)
+
+# 9. Loop to plot each ASV
+for (id in asv_ids) {
+  df_plot <- filter(melted_df_target, OTU == id)
+
+  # Calculate sample sizes for labels
+  counts <- df_plot %>%
+    group_by(severe) %>%
+    summarise(n = n(), .groups = "drop")
+  
+  labels_x <- setNames(
+    paste0(counts$severe, "\n(n=", counts$n, ")"),
+    counts$severe
+  )
+  
+  # Generate the plot
+  p1 <- ggplot(df_plot, aes(x = severe, y = Abundance, fill = severe)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.2, size = 1.5, alpha = 0.7) +
+    scale_fill_manual(values = palette) +
+    scale_x_discrete(labels = labels_x) +
+   # scale_y_log10() + # Using a log scale is often better for abundance data
+    labs(
+      x = 'Study Group',
+      y = 'Relative Abundance ',
+      title = paste('ASV:', id)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = 'none',
+      strip.text = element_text(size = 10),
+      axis.text.x = element_text(size = 10)
+    )
+  
+  # Save the plot
+  ggsave(
+    filename = paste0(output_dir, "/", gsub("[/: ]", "_", id), ".pdf"),
+    plot = p1,
+    width = 2.5,
+    height = 4
+  )
+}
+
+# Display the last generated plot
+if (exists("p1")) {
+  print(p1)
+}
+```
+#prevalence core taxa<40% by study group
+```{r}
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+phy=PHY_fil_rar_alpha_meco
+
+# --- 1. Agregar nombres de grupo ---
+group1 <- "Control"
+group2 <- "PE"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Filtrar por prevalencia ≥ 40% ---
+prev_filter <- genefilter_sample(
+  phy_genus,
+  filterfun_sample(function(x) x > 0),
+  A = 0.40 * nsamples(phy_genus)
+)
+taxa_to_keep <- taxa_names(phy_genus)[prev_filter]
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+# --- 3. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c("Control", "PE"))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 4. Comparar prevalencia ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  # Asegurar alineación correcta por nombres
+  presence <- otu[taxon, ]
+  presence <- presence > 0
+
+  group <- meta$study_group
+  names(presence) <- rownames(meta)  # asegura alineación exacta
+
+  # Subset sin NA
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+
+    prev1 <- mean(presence[group == "Control"])
+    prev2 <- mean(presence[group == "PE"])
+    count1 <- sum(presence[group == "Control"])
+    count2 <- sum(presence[group == "PE"])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+
+# Ajuste de p-valor y formato
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+# Agregar columnas
+results$Body_Site <- "Meconium"
+results$Taxa_Type <- "core"
+results$Population <- "All"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por p-valor (numérico)
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# Guardar
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "res/prev/prevalence_40_meconium_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+#prevalence alternative 20-40% by study group
+```{r}
+# --- 0. Librerías ---
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+phy=PHY_fil_rar_alpha_meco
+# --- 1. Parámetros de grupo ---
+group1 <- "Control"
+group2 <- "PE"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Calcular prevalencia global ---
+otu_full <- otu_table(phy_genus)
+if (!taxa_are_rows(phy_genus)) otu_full <- t(otu_full)
+otu_full <- as(otu_full, "matrix")
+mode(otu_full) <- "numeric"
+
+prevalence_all <- apply(otu_full > 0, 1, mean)
+
+# --- 4. Filtrar taxa accesorias: 20% < prevalencia ≤ 40% ---
+n_samples <- nsamples(phy_genus)
+taxa_to_keep <- names(prevalence_all[
+  (prevalence_all > 0.20) & (prevalence_all <= 0.40)
+])
+
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+cat(paste("Original genera:", ntaxa(phy_genus), "\n"))
+cat(paste("Accessory taxa (20–40%):", ntaxa(phy_filt), "\n"))
+
+# --- 5. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c(group1, group2))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 6. Comparar prevalencia entre grupos ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  presence <- otu[taxon, ] > 0
+  names(presence) <- rownames(meta)
+  
+  group <- meta$study_group
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+  
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+    prev1 <- mean(presence[group == group1])
+    prev2 <- mean(presence[group == group2])
+    
+    count1 <- sum(presence[group == group1])
+    count2 <- sum(presence[group == group2])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# --- 7. Ajuste de p-valor y formato final ---
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+results$Body_Site <- "Meconium"
+results$Taxa_Type <- "accessory taxa"
+results$Population <- "All"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por P_value
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# --- 8. Guardar resultados ---
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "res/prev/prevalence_20to40_meconium_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+#prevalence core taxa<40% by severe
+```{r}
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+phy=PHY_fil_rar_alpha_meco
+
+#subset remove control from severe_3cat
+phy <- subset_samples(phy, severe_3cat != "control")
+
+# --- 1. Agregar nombres de grupo ---
+group1 <- "Yes"
+group2 <- "No"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Filtrar por prevalencia ≥ 40% ---
+prev_filter <- genefilter_sample(
+  phy_genus,
+  filterfun_sample(function(x) x > 0),
+  A = 0.40 * nsamples(phy_genus)
+)
+taxa_to_keep <- taxa_names(phy_genus)[prev_filter]
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+# --- 3. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$severe <- factor(meta$severe, levels = c("Yes", "No"))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 4. Comparar prevalencia ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  # Asegurar alineación correcta por nombres
+  presence <- otu[taxon, ]
+  presence <- presence > 0
+
+  group <- meta$severe
+  names(presence) <- rownames(meta)  # asegura alineación exacta
+
+  # Subset sin NA
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+
+    prev1 <- mean(presence[group == "Yes"])
+    prev2 <- mean(presence[group == "No"])
+    count1 <- sum(presence[group == "Yes"])
+    count2 <- sum(presence[group == "No"])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+
+# Ajuste de p-valor y formato
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+# Agregar columnas
+results$Body_Site <- "Meconium"
+results$Taxa_Type <- "core"
+results$Population <- "PE individuals"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por p-valor (numérico)
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# Guardar
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "res/prev/prevalence_40_meconium_sev.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+
+#prevalence alternative 20-40% by severe
+```{r}
+phy=PHY_fil_rar_alpha_meco
+
+#subset remove control from severe_3cat
+phy <- subset_samples(phy, severe_3cat != "control")
+
+
+phy <- PHY_fil_rar_alpha_meco
+
+# --- 1. Parámetros de grupo ---
+group1 <- "No"
+group2 <- "Yes"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Calcular prevalencia global ---
+otu_full <- otu_table(phy_genus)
+if (!taxa_are_rows(phy_genus)) otu_full <- t(otu_full)
+otu_full <- as(otu_full, "matrix")
+mode(otu_full) <- "numeric"
+
+prevalence_all <- apply(otu_full > 0, 1, mean)
+
+# --- 4. Filtrar taxa accesorias: 20% < prevalencia ≤ 40% ---
+n_samples <- nsamples(phy_genus)
+taxa_to_keep <- names(prevalence_all[
+  (prevalence_all > 0.20) & (prevalence_all <= 0.40)
+])
+
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+cat(paste("Original genera:", ntaxa(phy_genus), "\n"))
+cat(paste("Accessory taxa (20–40%):", ntaxa(phy_filt), "\n"))
+
+# --- 5. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$severe <- factor(meta$severe, levels = c(group1, group2))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 6. Comparar prevalencia entre grupos ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  presence <- otu[taxon, ] > 0
+  names(presence) <- rownames(meta)
+  
+  group <- meta$severe
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+  
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+    prev1 <- mean(presence[group == group1])
+    prev2 <- mean(presence[group == group2])
+    
+    count1 <- sum(presence[group == group1])
+    count2 <- sum(presence[group == group2])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      No_count = count1,
+      No_percent = sprintf("%.2f%%", prev1 * 100),
+      Yes_count = count2,
+      Yes_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# --- 7. Ajuste de p-valor y formato final ---
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+results$Body_Site <- "Meconium"
+results$Taxa_Type <- "accessory taxa"
+results$Population <- "PE individuals"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "No_count", "No_percent",
+                       "Yes_count", "Yes_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por P_value
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# --- 8. Guardar resultados ---
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "res/prev/prevalence_20to40_meconium_sev.csv", row.names = FALSE)
+print(results)
+
+```
+# extract classificacion of partiuclar genus
+```{r}
+phy=PHY_fil_rar_alpha_meco
+# --- 1. Asegurar que el objeto phyloseq tiene tabla taxonómica ---
+taxa <- tax_table(phy)
+
+# --- 2. Convertir a data frame para fácil manejo ---
+tax_df <- as.data.frame(taxa)
+tax_df$TaxonID <- rownames(tax_df)
+
+# --- 3. Filtrar filas cuyo género es "YIM-78166" ---
+# Buscar en la columna "Genus"
+#tax_match <- tax_df[as.character(tax_df[, "Genus"]) == "g__YIM-78166", ]
+tax_match <- tax_df[as.character(tax_df[, "Genus"]) == "g__KA00134", ]
+
+
+
+# --- 4. Ver resultado ---
+if (nrow(tax_match) == 0) {
+  cat("No taxa found for genus\n")
+} else {
+  print(tax_match)
+}
+
+
+
+```
+

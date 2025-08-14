@@ -1,0 +1,424 @@
+---
+title: "Beta diversity Preeclampsia"
+output: html_notebook
+---
+#LOAD
+This script compare beta diversity and plot the results
+-Oral and Vaginal sites
+-PE status (study_group), Severity and Blood Pressure
+-Stratified by ethnicity
+-Dissimilarities: Bray-Curtis and Jaccard
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+
+ 
+# Cargar las librerías necesarias
+library(phyloseq)
+library(vegan)
+library(tidyverse)
+library(reshape2)
+library(chemometrics)
+library(emmeans)
+library(usedist)
+library(stargazer)
+library(table1)
+library(tidyr)
+library(usedist)
+library(RColorBrewer)
+library(dplyr)
+library(compositions)
+
+# Establecer el directorio de trabajo
+
+# Cargar los datos
+#load("R/phy_objects/PHYrar_alpha.RData")
+#
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/R/phy_objects/PHYrar_alpha_ggext_subset02_newseqs.RData")
+
+```
+
+```{r}
+
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+#extract metadata
+met <- as(sample_data(phy), "data.frame")
+met
+```
+
+
+# PERMANOVA and NMDS plot
+To run "severe" variables we have to do "drop_na".
+For better vizualization remove study_id=="401" for oral samples (outlayer)
+Uncomment the body site, dissimilarity and the color pallet you wish to run
+```{r}
+
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+#phy= subset_samples(phy, severe_3cat!="control")
+# 1. select body site
+
+phy= subset_samples(phy, body_site=="Vaginal")
+bs="vaginal"
+
+# phy= subset_samples(phy, body_site=="MomTongue")
+# bs="oral"
+# #remove from th ephy the samples study_id!=401
+# phy= subset_samples(phy, study_id!="401")
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+# 2. select dissimilarities
+#DISTANCE
+ dist_metrics = c("bray")
+ metric_names = c("bray")
+
+# dist_metrics = c("jaccard")
+# metric_names = c("jaccard")
+
+# 3. Select group and pallet
+group= "study_group"
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# group= "severe_3cat"
+# palette <- c("Yes" = "red", "No" = "orange", "control" = "#5a9bd4")
+
+# group= "severe"
+# palette <- c("Yes" = "red", "No" = "orange")
+
+# 4. Filter metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( bmi, body_site, 
+                  # severe_3cat,severe,
+                   study_group,
+                   antibiotics_during_pregnancy, ethnicity) %>% 
+    drop_na()
+
+
+phy <- prune_samples(sample_names(phy) %in% rownames(met1), phy)
+#  "antibiotics_during_pregnancy") {
+#   palette <- c("Yes" = "red", "No" = "orange")
+#   palette <- c("Yes" = "red", "No" = "blue")
+#   palette <- c("Hispanic/Latina" = "orange", "Not Hispanic/Latina" = "blue")
+#   palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+# Definir la fórmula para el modelo usando la variable seleccionada
+form_mod0 <- as.formula(paste0("only_dist ~ ", group, " + bmi + antibiotics_during_pregnancy 
+                               + ethnicity"
+                               ))
+
+# Crear una lista para almacenar los resultados
+lista <- list()
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Seleccionar muestras presentes en los metadatos
+  samples <- row.names(met1)
+  
+  # Convertir 'dist' a matriz para poder indexar
+  dist_matrix <- as.matrix(dist)
+  
+  # Verificar que los nombres de las muestras coinciden entre 'dist_matrix' y 'met1'
+  common_samples <- intersect(samples, rownames(dist_matrix))
+  
+  if (length(common_samples) == 0) {
+    stop("No hay muestras en común entre 'met1' y la matriz de distancia.")
+  }
+  
+  # Subconjuntar la matriz de distancias basado en muestras comunes
+  dist_new <- dist_matrix[common_samples, common_samples]
+  
+  # Si es necesario, convertir la matriz subconjunta de nuevo a objeto 'dist'
+  # only_dist <- as.dist(dist_new)
+  
+  # En este caso, podemos continuar utilizando 'dist_new' como matriz
+  only_dist <- dist_new
+  
+  # Unir distancias con metadatos
+  met1_subset <- met1[common_samples, ]
+  
+  # Correr el modelo adonis2
+  set.seed(711)
+  mod_adonis <- adonis2(only_dist ~ ., data = met1_subset[, c(group, "bmi", "antibiotics_during_pregnancy" ,"ethnicity"
+                                                              )], permutations = 999, by = "margin")
+  a1 <- as.data.frame(mod_adonis)
+  a1$metric <- metric_names[i]
+  
+  # Guardar resultado en la lista
+  lista[[i]] <- a1
+  
+  # ---- Generar y guardar el gráfico de MDS ----
+  
+  # Realiza la ordenación MDS
+  set.seed(711)
+  mds <- metaMDS(only_dist, trymax = 50)
+  
+  # Extrae las puntuaciones MDS
+  mds_scores <- as.data.frame(scores(mds))
+  mds_scores$sample_id <- row.names(mds_scores)
+  
+  # Combina con los metadatos
+  mds_data <- merge(mds_scores, met1_subset, by.x = "sample_id", by.y = "row.names")
+  
+  # Calculate the centroid for each group
+centroids <- mds_data %>%
+  group_by(!!sym(group)) %>%
+  summarize(NMDS1 = mean(NMDS1), NMDS2 = mean(NMDS2))
+
+# Generate NMDS plot
+po <- ggplot(mds_data, aes(x = NMDS1, y = NMDS2, color = !!sym(group))) + 
+  geom_point(size = 3, alpha = 1) +  # Plot individual points
+  stat_ellipse(aes(color = !!sym(group)), level = 0.95, geom = "polygon", alpha = 0) +  # Ellipses
+  geom_point(data = centroids, aes(x = NMDS1, y = NMDS2, color = !!sym(group)), 
+             size = 4, shape = 8, stroke = 1.5) +  # Add centroids with distinct shape
+  theme_bw() +
+  labs(title = paste(bs, "NMDS Ordination by", group, metric_names[i]),
+       x = "NMDS1",
+       y = "NMDS2") +
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = palette)
+
+po
+
+  po
+  # Crea la carpeta con la fecha de hoy
+  today <- format(Sys.Date(), "%Y-%m-%d")
+  dir.create(file.path("results/beta", today, bs, group), showWarnings = FALSE, recursive = TRUE)
+  
+  # Guarda el gráfico en la carpeta con la fecha de hoy
+  file_name <- paste0("NMDS_", dist_metrics[i], "_4var_by_", group, ".pdf")
+  ggsave(file.path("results/beta", today, bs, group, file_name), plot = po, width = 6.5, height = 6)
+  
+}
+
+# bind results
+tabla_adonis <- do.call("rbind", lista)
+
+# Guardar la tabla resultante de adonis en un archivo CSV con la fecha actual
+write.csv(tabla_adonis, file = file.path("results/beta", today, bs, group, paste0(metric_names[i], "_4var_adonis_", group, ".csv")), row.names = TRUE)
+
+# Mostrar los resultados en la consola (opcional)
+print(tabla_adonis)
+
+
+```
+
+# PERMANOVA: Blood Pressure
+
+```{r}
+library(phyloseq)
+library(dplyr)
+library(vegan)
+library(ggplot2)
+library(ggrepel)
+
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+
+vars_de_interes <- c("ppsystolic", "ppdiastolic")
+body_sites <- c("Vaginal", "MomTongue")
+bs_labels <- c("vaginal", "oral")
+dist_metrics <- c("bray", "jaccard")
+metric_names <- c("Bray", "Jaccard")
+
+today <- format(Sys.Date(), "%Y-%m-%d")
+
+for (bs_idx in seq_along(body_sites)) {
+
+  phy_bs <- subset_samples(phy, body_site == body_sites[bs_idx])
+  if (body_sites[bs_idx] == "MomTongue") {
+    phy_bs <- subset_samples(phy_bs, study_id != "401")
+  }
+  phy_bs <- prune_taxa(taxa_sums(phy_bs) > 0, phy_bs)
+  bs_label <- bs_labels[bs_idx]
+
+  met <- as(sample_data(phy_bs), "data.frame")
+
+  # Definir grupo étnico
+  met$ethnicity_group <- NA
+  met$ethnicity_group[met$ethnicity == "Hispanic/Latina"] <- "Hispanic"
+  met$ethnicity_group[met$race == "White/Caucasian" & met$ethnicity == "Not Hispanic/Latina"] <- "White"
+
+  # Loop por grupo étnico
+  for (eth in c("Hispanic", "White")) {
+
+    met_eth <- met %>%
+      filter(ethnicity_group == eth) %>%
+      dplyr::select(bmi, body_site, severe_3cat, severe, study_group,
+                    antibiotics_during_pregnancy, ethnicity,
+                    ppsystolic, ppdiastolic, race, ethnicity_group) %>%
+      drop_na()
+
+    phy_eth <- prune_samples(rownames(met_eth), phy_bs)
+
+    for (group in vars_de_interes) {
+
+      lista <- list()
+
+      for (i in seq_along(dist_metrics)) {
+
+        binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+        dist <- phyloseq::distance(phy_eth, method = dist_metrics[i], binary = binary_flag)
+        dist_matrix <- as.matrix(dist)
+        common_samples <- intersect(rownames(dist_matrix), rownames(met_eth))
+        dist_new <- dist_matrix[common_samples, common_samples]
+        only_dist <- dist_new
+        met1_subset <- met_eth[common_samples, ]
+
+        set.seed(711)
+        mod_adonis <- adonis2(
+          only_dist ~ ., 
+          data = met1_subset[, c(group, "bmi", "antibiotics_during_pregnancy")],
+          permutations = 999,
+          by = "margin"
+        )
+
+        a1 <- as.data.frame(mod_adonis)
+        a1$metric <- metric_names[i]
+        a1$variable_tested <- group
+        a1$ethnicity_group <- eth
+        lista[[i]] <- a1
+
+        # NMDS
+        set.seed(711)
+        mds <- metaMDS(only_dist, trymax = 50)
+        mds_scores <- as.data.frame(scores(mds))
+        mds_scores$sample_id <- rownames(mds_scores)
+        mds_data <- merge(mds_scores, met1_subset, by.x = "sample_id", by.y = "row.names")
+
+        po <- ggplot(mds_data, aes(x = NMDS1, y = NMDS2, color = !!sym(group))) +
+          geom_point(size = 3, alpha = 1) +
+          scale_color_gradient(low = "blue", high = "red") +
+          theme_bw() +
+          labs(title = paste(bs_label, eth, "NMDS by", group, "-", metric_names[i]),
+               x = "NMDS1", y = "NMDS2") +
+          theme(legend.position = "bottom")
+
+        # Guardar
+        dir_out <- file.path("results/beta", today, bs_label, eth, group)
+        dir.create(dir_out, showWarnings = FALSE, recursive = TRUE)
+        ggsave(file.path(dir_out, paste0("NMDS_", dist_metrics[i], "_by_", group, ".pdf")),
+               plot = po, width = 6.5, height = 6)
+      }
+
+      # Guardar tabla adonis
+      tabla_adonis <- do.call("rbind", lista)
+      write.csv(tabla_adonis,
+                file = file.path("results/beta", today, bs_label, eth, group,
+                                 paste0("adonis_", group, ".csv")),
+                row.names = TRUE)
+
+      print(paste("Análisis completo:", bs_label, "|", eth, "|", group))
+    }
+  }
+}
+
+```
+
+# BetaDispers and boxplot
+remove 401 for oral
+```{r}
+phy<-PHYrar_alpha_ggext_subset02_newseqs
+
+#o. Primer filtro
+phy= subset_samples(phy, severe_3cat!="control")
+
+
+# 1. elegir vaginal or oral
+
+ # phy= subset_samples(phy, body_site=="Vaginal")
+ # bs="vaginal"
+# group= "study_group"
+# palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+ group= "severe"
+   palette <- c("No" = "orange", "Yes" = "#CC3300")
+
+phy= subset_samples(phy, body_site=="MomTongue")
+bs="oral"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+# dist_metrics = c("bray")
+# metric_names = c("bray")
+
+# 
+dist_metrics = c("jaccard")
+metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy= subset_samples(phy, study_id!="401")
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( bmi, body_site, 
+                   severe_3cat,severe,
+                   #study_group, 
+                   antibiotics_during_pregnancy, ethnicity) %>%  #diabetes
+    drop_na()
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("results/beta", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper_4var.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+
+```
+#BetaDisper: Blood pressure

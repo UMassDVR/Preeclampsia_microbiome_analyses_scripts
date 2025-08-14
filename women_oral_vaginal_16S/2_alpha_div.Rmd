@@ -1,0 +1,1164 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+#LOAD
+This script compare alpha diversity and plot the results
+-Oral and Vaginal sites
+-PE status (study_group), Severity and Blood Pressure
+-Stratified by ethnicity
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+
+# Cargar las librerías necesarias
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggprism)
+library(MASS)
+library(car)
+
+
+# Cargar los datos
+load("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/P16S/R/phy_objects/PHYrar_alpha_ggext_subset02_newseqs.RData")
+```
+
+# Alpha Vaginal study_group
+Uncomment function (at the endof the block) and color pallet based on your variable of interest
+```{r setup, include=FALSE}
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="Vaginal")
+
+met <- data.frame(sample_data(phy))
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+
+shapiro.test(met$shannon_boxcox)
+
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+    met1 <- met %>%
+    dplyr::select(study_id, observed, shannon_boxcox, simpson, bmi, !!sym(variable_interes), antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+  
+  # Crear fórmulas dinámicas
+  formula_sha <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes,  "bmi",  "antibiotics_during_pregnancy","ethnicity"), response = "log(observed)")
+  formula_simp <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "simpson")
+  
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+#palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+  
+# Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Vaginal Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # save
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("results/alpha/", as.character(fecha_actual)),"/vaginal", recursive = TRUE)
+  
+  ggsave(paste0("results/alpha/", as.character(fecha_actual), "/vaginal/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  #save text
+  capture.output(best_sha, file = paste0("results/alpha/", as.character(fecha_actual), "/vaginal/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("results/alpha/", as.character(fecha_actual), "/vaginal/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("results/alpha/", as.character(fecha_actual), "/vaginal/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Function. Uncomment the function you woul like to run 
+generar_grafico("study_group")
+#generar_grafico("severe")
+
+```
+
+# Alpha Vaginal severity
+Uncomment function (at the endof the block) and color pallet based on your variable of interest
+```{r setup, include=FALSE}
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="Vaginal")
+phy= subset_samples(phy, severe_3cat!= "control")
+
+met <- data.frame(sample_data(phy))
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+
+shapiro.test(met$shannon_boxcox)
+
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+    met1 <- met %>%
+    dplyr::select(study_id, observed, shannon_boxcox, simpson, bmi, !!sym(variable_interes), antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+  
+  # Crear fórmulas dinámicas
+  formula_sha <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes,  "bmi",  "antibiotics_during_pregnancy","ethnicity"), response = "log(observed)")
+  formula_simp <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "simpson")
+  
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+#  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+  
+# Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Vaginal Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("results/alpha/", as.character(fecha_actual)),"/vaginal", recursive = TRUE)
+  
+  # Guardar el gráfico en PDF
+  ggsave(paste0("results/alpha/", as.character(fecha_actual), "/vaginal/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("results/alpha/", as.character(fecha_actual), "/vaginal/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("results/alpha/", as.character(fecha_actual), "/vaginal/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("results/alpha/", as.character(fecha_actual), "/vaginal/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Llamar a la función para generar el gráfico y ajustar los modelos
+#generar_grafico("study_group")
+generar_grafico("severe")
+
+```
+# Alpha Vaginal Blood Pressure 
+Función para correr alpha
+Hay que descomentar la paleta de colores que se requiere segun la variable de interes
+VAGINAL
+```{r setup, include=FALSE}
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+phy <- subset_samples(phy, body_site == "Vaginal")
+
+met <- data.frame(sample_data(phy))
+met$study_id <- rownames(met)
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+
+shapiro.test(met$shannon_boxcox)
+
+# Función extendida para variables continuas y guardar resultados tabulares
+generar_grafico_continuo <- function(variable_interes) {
+  # Filtrar y seleccionar columnas relevantes
+  met1 <- met %>%
+    dplyr::select(study_id, observed, shannon_boxcox, simpson,
+                  bmi, !!sym(variable_interes),
+                  antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+
+  # Fórmulas
+  formula_sha <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "log(observed)")
+  formula_simp <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "simpson")
+
+  # Modelos
+  best_sha <- step(lm(formula_sha, data = met1), trace = 0)
+  best_obs <- step(lm(formula_obs, data = met1), trace = 0)
+  best_simp <- step(lm(formula_simp, data = met1), trace = 0)
+
+  # Extraer coeficientes y armar tabla
+  extract_model_table <- function(model, diversity_metric) {
+    coefs <- summary(model)$coefficients
+    coefs_df <- as.data.frame(coefs)
+    coefs_df$Model_Term <- rownames(coefs_df)
+    coefs_df <- coefs_df[coefs_df$Model_Term != "(Intercept)", ]
+    coefs_df$`Body Site` <- "Vaginal"
+    coefs_df$`Diversity Metric` <- diversity_metric
+    coefs_df$`Population Subset` <- "All Subjects"
+    coefs_df$`Analysis Focus` <- variable_interes
+    coefs_df <- coefs_df %>%
+      dplyr::select(`Body Site`, `Diversity Metric`, `Population Subset`, `Analysis Focus`,
+                    Model_Term, Estimate = Estimate, `Std. Error` = `Std. Error`,
+                    `t value` = `t value`, `p-value` = `Pr(>|t|)`)
+    coefs_df
+  }
+
+  table_sha <- extract_model_table(best_sha, "Shannon")
+  table_obs <- extract_model_table(best_obs, "Observed")
+  table_simp <- extract_model_table(best_simp, "Simpson")
+
+  # Unir todas las tablas
+  results_df <- bind_rows(table_sha, table_obs, table_simp)
+
+  # Añadir asterisco a p-valores < 0.05
+  results_df$`p-value` <- ifelse(results_df$`p-value` < 0.05,
+                                 paste0(formatC(results_df$`p-value`, format = "f", digits = 4), "*"),
+                                 formatC(results_df$`p-value`, format = "f", digits = 4))
+
+  # --- Agregar study_group y preparar visualización ---
+  met1$study_group <- met$study_group[match(met1$study_id, met$study_id)]
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+  p1 <- ggplot(met_long, aes_string(x = variable_interes, y = "value", color = "study_group")) +
+    geom_point(size = 3, alpha = 0.9) +
+    geom_smooth(method = "lm", se = TRUE, color = "black") +
+    facet_wrap(~measure, scales = "free_y") +
+    labs(title = variable_interes,
+         x = variable_interes,
+         y = "Vaginal Alpha Diversity",
+         color = "Study Group") +
+    scale_color_manual(values = palette) +
+    theme_prism(base_size = 16) +
+    theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  # --- Guardar resultados usando file.path (estilo lado2) ---
+  fecha_actual <- Sys.Date()
+dir_path <- file.path("..", "results", "alpha", as.character(fecha_actual), "vaginal", "All_Subjects")
+
+dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+
+# Verifica visualmente en consola
+cat("📁 Guardando en:", normalizePath(dir_path), "\n")
+
+ggsave(file.path(dir_path, paste0("alpha_vag_plot_", variable_interes, ".pdf")),
+       plot = p1, width = 10, height = 5.5)
+
+write.csv(results_df,
+          file = file.path(dir_path, paste0("alpha_model_results_", variable_interes, ".csv")),
+          row.names = FALSE)
+}
+
+# Ejecutar para variables continuas
+generar_grafico_continuo("ppsystolic")
+generar_grafico_continuo("ppdiastolic")
+
+```
+
+# Alpha Vaginal by ethnicity Blood Pressure
+```{r}
+
+
+# --- 1. Datos de entrada ---
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+phy <- subset_samples(phy, body_site == "Vaginal")
+phy <- subset_samples(phy, !is.na(ppsystolic) & !is.na(ppdiastolic))  # eliminar NAs en las variables de interés
+
+met <- data.frame(sample_data(phy))
+met$study_id <- rownames(met)
+
+# --- 2. Transformación Box-Cox de Shannon ---
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+shapiro.test(met$shannon_boxcox)
+
+# --- 3. Función de análisis para variables continuas ---
+generar_grafico_continuo <- function(variable_interes, met_sub, subset_name = "All_Subjects") {
+  # Filtrar variables necesarias
+  met1 <- met_sub %>%
+    dplyr::select(study_id, observed, shannon_boxcox, simpson,
+                  bmi, !!sym(variable_interes),
+                  antibiotics_during_pregnancy, ethnicity, study_group) %>%
+    drop_na()
+
+  if (nrow(met1) < 5) {
+    message(paste("⚠️ Too few samples for", variable_interes, "in", subset_name, "- skipping"))
+    return(NULL)
+  }
+
+  # Modelos
+  formula_sha <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "log(observed)")
+  formula_simp <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "simpson")
+
+  best_sha <- step(lm(formula_sha, data = met1), trace = 0)
+  best_obs <- step(lm(formula_obs, data = met1), trace = 0)
+  best_simp <- step(lm(formula_simp, data = met1), trace = 0)
+
+  # Función para extraer coeficientes
+  extract_model_table <- function(model, diversity_metric) {
+    coefs <- summary(model)$coefficients
+    coefs_df <- as.data.frame(coefs)
+    coefs_df$Model_Term <- rownames(coefs_df)
+    coefs_df <- coefs_df[coefs_df$Model_Term != "(Intercept)", ]
+    
+    if (nrow(coefs_df) == 0) return(NULL)
+
+    coefs_df$`Body Site` <- "Vaginal"
+    coefs_df$`Diversity Metric` <- diversity_metric
+    coefs_df$`Population Subset` <- subset_name
+    coefs_df$`Analysis Focus` <- variable_interes
+    coefs_df <- coefs_df %>%
+      dplyr::select(`Body Site`, `Diversity Metric`, `Population Subset`, `Analysis Focus`,
+                    Model_Term, Estimate = Estimate, `Std. Error` = `Std. Error`,
+                    `t value` = `t value`, `p-value` = `Pr(>|t|)`)
+    return(coefs_df)
+  }
+
+  # Tablas de resultados
+  table_sha <- extract_model_table(best_sha, "Shannon")
+  table_obs <- extract_model_table(best_obs, "Observed")
+  table_simp <- extract_model_table(best_simp, "Simpson")
+
+  result_tables <- list(table_sha, table_obs, table_simp)
+  result_tables <- result_tables[!sapply(result_tables, is.null)]
+
+  if (length(result_tables) == 0) {
+    message(paste("⚠️ No valid model terms for", variable_interes, "in", subset_name, "- skipping"))
+    return(NULL)
+  }
+
+  results_df <- bind_rows(result_tables)
+
+  # Agregar asteriscos a p < 0.05
+  results_df$`p-value` <- ifelse(as.numeric(gsub("\\*", "", results_df$`p-value`)) < 0.05,
+                                 paste0(formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4), "*"),
+                                 formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4))
+
+  # --- 4. Visualización ---
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+
+  p1 <- ggplot(met_long, aes_string(x = variable_interes, y = "value", color = "study_group")) +
+    geom_point(size = 3, alpha = 0.7) +
+    geom_smooth(method = "lm", se = TRUE, color = "black") +
+    facet_wrap(~measure, scales = "free_y") +
+    labs(title = variable_interes,
+         x = variable_interes,
+         y = "Vaginal Alpha Diversity",
+         color = "Study Group") +
+    scale_color_manual(values = palette) +
+    theme_prism(base_size = 16) +
+    theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  # --- 5. Guardar resultados ---
+  fecha_actual <- Sys.Date()
+  dir_path <- file.path("results", "alpha", as.character(fecha_actual), "vaginal", subset_name)
+  dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+
+  ggsave(file.path(dir_path, paste0("alpha_vag_plot_", variable_interes, ".pdf")),
+         plot = p1, width = 10, height = 5.5)
+
+  write.csv(results_df,
+            file = file.path(dir_path, paste0("alpha_model_results_", variable_interes, ".csv")),
+            row.names = FALSE)
+}
+
+# --- 6. Subgrupos ---
+met_white <- met %>%
+  filter(race == "White/Caucasian", ethnicity == "Not Hispanic/Latina")
+
+met_hispanic <- met %>%
+  filter(ethnicity == "Hispanic/Latina")
+
+# --- 7. Ejecutar análisis para cada grupo y variable ---
+vars <- c("ppsystolic", "ppdiastolic")
+
+for (v in vars) {
+  generar_grafico_continuo(v, met_white, "White")
+  generar_grafico_continuo(v, met_hispanic, "Hispanic")
+}
+
+
+```
+
+# Alpha ORAL study_group
+Simpson no normal
+```{r}
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="MomTongue")
+
+met <- data.frame(sample_data(phy))
+
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+
+
+# NO LOGRE NORMALIZAR SIMPSON
+# # Aplicar Box-Cox a la columna 'simpson'
+# boxcox_simpson <- boxcox(met$simpson ~ 1, plotit = FALSE)
+# lambda_simpson <- boxcox_simpson$x[which.max(boxcox_simpson$y)]
+# met$simpson_boxcox <- (met$simpson ^ lambda_simpson - 1) / lambda_simpson
+# 
+# shapiro.test(met$simpson_boxcox)
+# shapiro.test(sqrt(met$simpson))
+# yeo_johnson <- boxcox(met$simpson ~ 1, plotit = FALSE, family = "yj")
+# lambda_yj <- yeo_johnson$x[which.max(yeo_johnson$y)]
+# met$simpson_yj <- (met$simpson ^ lambda_yj - 1) / lambda_yj
+# 
+# # Verificar normalidad
+ shapiro.test(met$simpson)
+
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+  met1 <- met %>%
+    dplyr::select(study_id, observed, simpson, shannon_boxcox, bmi, !!sym(variable_interes), antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+  
+  # Crear fórmulas dinámicas
+  formula_sha <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes,  "bmi",  "antibiotics_during_pregnancy","ethnicity"), response = "observed")
+  formula_simp <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "simpson")
+  
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+ # palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+  
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+  
+  # Crear el gráfico
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Oral Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("results/alpha/", as.character(fecha_actual),"/oral"), recursive = T)
+  setwd(paste0("results/alpha/", as.character(fecha_actual),"/oral"))
+  
+  # Guardar el gráfico en PDF
+  pdf(paste0("alpha_plot_", variable_interes, ".pdf"), width = 10, height = 5.5)
+  print(p1)
+  dev.off()
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(print(best_sha), file = paste0("best_model_shannon_oral", variable_interes, ".txt"))
+  capture.output(print(best_obs), file = paste0("best_model_observed_oral", variable_interes, ".txt"))
+  capture.output(print(best_simp), file = paste0("best_model_simpson_oral", variable_interes, ".txt"))
+}
+# Generar gráficos y modelos para el subset 'Oral'
+generar_grafico("study_group")
+```
+
+# Alpha ORAL severity
+Simpson no normal
+```{r}
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="MomTongue")
+phy= subset_samples(phy, severe_3cat!="control")
+
+met <- data.frame(sample_data(phy))
+
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+
+
+# NO LOGRE NORMALIZAR SIMPSON
+# # Aplicar Box-Cox a la columna 'simpson'
+# boxcox_simpson <- boxcox(met$simpson ~ 1, plotit = FALSE)
+# lambda_simpson <- boxcox_simpson$x[which.max(boxcox_simpson$y)]
+# met$simpson_boxcox <- (met$simpson ^ lambda_simpson - 1) / lambda_simpson
+# 
+# shapiro.test(met$simpson_boxcox)
+# shapiro.test(sqrt(met$simpson))
+# yeo_johnson <- boxcox(met$simpson ~ 1, plotit = FALSE, family = "yj")
+# lambda_yj <- yeo_johnson$x[which.max(yeo_johnson$y)]
+# met$simpson_yj <- (met$simpson ^ lambda_yj - 1) / lambda_yj
+# 
+# # Verificar normalidad
+ shapiro.test(met$simpson)
+
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+  met1 <- met %>%
+    dplyr::select(study_id, observed, simpson, shannon_boxcox, bmi, !!sym(variable_interes), antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+  
+  # Crear fórmulas dinámicas
+  formula_sha <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes,  "bmi",  "antibiotics_during_pregnancy","ethnicity"), response = "observed")
+  formula_simp <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "simpson")
+  
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met1)
+  mod_obs <- lm(formula_obs, data = met1)
+  mod_simp <- lm(formula_simp, data = met1)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+ # palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+  palette <- c("Yes" = "red", "No" = "orange")
+   # palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #       palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+  
+
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+  
+  # Crear el gráfico
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Oral Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("results/alpha/", as.character(fecha_actual),"/oral"), recursive = T)
+  setwd(paste0("results/alpha/", as.character(fecha_actual),"/oral"))
+  
+  # Guardar el gráfico en PDF
+  pdf(paste0("alpha_plot_", variable_interes, ".pdf"), width = 10, height = 5.5)
+  print(p1)
+  dev.off()
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(print(best_sha), file = paste0("best_model_shannon_oral", variable_interes, ".txt"))
+  capture.output(print(best_obs), file = paste0("best_model_observed_oral", variable_interes, ".txt"))
+  capture.output(print(best_simp), file = paste0("best_model_simpson_oral", variable_interes, ".txt"))
+}
+# Generar gráficos y modelos para el subset 'Oral'
+#generar_grafico("study_group")
+generar_grafico("severe")
+```
+
+
+
+# Alpha ORAL Blood Pressure 
+Función para correr alpha
+Hay que descomentar la paleta de colores que se requiere segun la variable de interes
+VAGINAL
+```{r setup, include=FALSE}
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="MomTongue")
+
+met <- data.frame(sample_data(phy))
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+
+shapiro.test(met$shannon_boxcox)
+# Función extendida para variables continuas y guardar resultados tabulares
+generar_grafico_continuo <- function(variable_interes) {
+  # Filtrar y seleccionar columnas relevantes
+  met1 <- met %>%
+    dplyr::select(study_id, observed, shannon_boxcox, simpson,
+                  bmi, !!sym(variable_interes),
+                  antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+
+  # Fórmulas
+  formula_sha <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "log(observed)")
+  formula_simp <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "simpson")
+
+  # Modelos
+  best_sha <- step(lm(formula_sha, data = met1), trace = 0)
+  best_obs <- step(lm(formula_obs, data = met1), trace = 0)
+  best_simp <- step(lm(formula_simp, data = met1), trace = 0)
+
+  # Extraer coeficientes y armar tabla
+  extract_model_table <- function(model, diversity_metric) {
+    coefs <- summary(model)$coefficients
+    coefs_df <- as.data.frame(coefs)
+    coefs_df$Model_Term <- rownames(coefs_df)
+    coefs_df <- coefs_df[coefs_df$Model_Term != "(Intercept)", ]
+    coefs_df$`Body Site` <- "MomTongue"
+    coefs_df$`Diversity Metric` <- diversity_metric
+    coefs_df$`Population Subset` <- "All Subjects"
+    coefs_df$`Analysis Focus` <- variable_interes
+    coefs_df <- coefs_df %>%
+      dplyr::select(`Body Site`, `Diversity Metric`, `Population Subset`, `Analysis Focus`,
+                    Model_Term, Estimate = Estimate, `Std. Error` = `Std. Error`,
+                    `t value` = `t value`, `p-value` = `Pr(>|t|)`)
+    coefs_df
+  }
+
+  table_sha <- extract_model_table(best_sha, "Shannon")
+  table_obs <- extract_model_table(best_obs, "Observed")
+  table_simp <- extract_model_table(best_simp, "Simpson")
+
+  # Unir todas las tablas
+  results_df <- bind_rows(table_sha, table_obs, table_simp)
+
+  # Añadir asterisco a p-valores < 0.05
+  results_df$`p-value` <- ifelse(results_df$`p-value` < 0.05,
+                                 paste0(formatC(results_df$`p-value`, format = "f", digits = 4), "*"),
+                                 formatC(results_df$`p-value`, format = "f", digits = 4))
+
+  # Guardar tabla como CSV
+  fecha_actual <- Sys.Date()
+dir_path <- file.path("..", "results", "alpha", as.character(fecha_actual), "oral", "All_Subjects")
+
+  dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+  write.csv(results_df,
+            file = paste0(dir_path, "/alpha_model_results_", variable_interes, ".csv"),
+            row.names = FALSE)
+
+ # Agregar study_group a met1
+met1$study_group <- met$study_group[match(met1$study_id, met$study_id)]
+
+# Volver a pivotear
+met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+
+# Definir paleta
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# Crear gráfico
+p1 <- ggplot(met_long, aes_string(x = variable_interes, y = "value", color = "study_group")) +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") +
+  facet_wrap(~measure, scales = "free_y") +
+  labs(title = variable_interes,
+       x = variable_interes,
+       y = "MomTongue Alpha Diversity",
+       color = "Study Group") +
+  scale_color_manual(values = palette) +
+  theme_prism(base_size = 16) +
+  theme(axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 14),
+        axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16),
+        plot.title = element_text(size = 18),
+        strip.text = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 14))
+
+ggsave(paste0(dir_path, "/alpha_plot_", variable_interes, ".pdf"),
+         plot = p1, width = 10, height = 5.5)
+}
+
+# Ejecutar con tus variables
+generar_grafico_continuo("ppsystolic")
+generar_grafico_continuo("ppdiastolic")
+
+```
+
+# Alpha ORAL by ethnicity blood pressure
+```{r}
+
+
+# --- 1. Datos de entrada ---
+phy <- PHYrar_alpha_ggext_subset02_newseqs
+phy <- subset_samples(phy, body_site == "MomTongue")
+phy <- subset_samples(phy, !is.na(ppsystolic) & !is.na(ppdiastolic))  # eliminar NAs en las variables de interés
+
+met <- data.frame(sample_data(phy))
+met$study_id <- rownames(met)
+
+# --- 2. Transformación Box-Cox de Shannon ---
+boxcox_shannon <- boxcox(met$shannon ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$shannon ^ lambda_shannon - 1) / lambda_shannon
+shapiro.test(met$shannon_boxcox)
+
+# --- 3. Función de análisis para variables continuas ---
+generar_grafico_continuo <- function(variable_interes, met_sub, subset_name = "All_Subjects") {
+  # Filtrar variables necesarias
+  met1 <- met_sub %>%
+    dplyr::select(study_id, observed, shannon_boxcox, simpson,
+                  bmi, !!sym(variable_interes),
+                  antibiotics_during_pregnancy, ethnicity, study_group) %>%
+    drop_na()
+
+  if (nrow(met1) < 5) {
+    message(paste("⚠️ Too few samples for", variable_interes, "in", subset_name, "- skipping"))
+    return(NULL)
+  }
+
+  # Modelos
+  formula_sha <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "log(observed)")
+  formula_simp <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "simpson")
+
+  best_sha <- step(lm(formula_sha, data = met1), trace = 0)
+  best_obs <- step(lm(formula_obs, data = met1), trace = 0)
+  best_simp <- step(lm(formula_simp, data = met1), trace = 0)
+
+  # Función para extraer coeficientes
+  extract_model_table <- function(model, diversity_metric) {
+    coefs <- summary(model)$coefficients
+    coefs_df <- as.data.frame(coefs)
+    coefs_df$Model_Term <- rownames(coefs_df)
+    coefs_df <- coefs_df[coefs_df$Model_Term != "(Intercept)", ]
+    
+    if (nrow(coefs_df) == 0) return(NULL)
+
+    coefs_df$`Body Site` <- "MomTongue"
+    coefs_df$`Diversity Metric` <- diversity_metric
+    coefs_df$`Population Subset` <- subset_name
+    coefs_df$`Analysis Focus` <- variable_interes
+    coefs_df <- coefs_df %>%
+      dplyr::select(`Body Site`, `Diversity Metric`, `Population Subset`, `Analysis Focus`,
+                    Model_Term, Estimate = Estimate, `Std. Error` = `Std. Error`,
+                    `t value` = `t value`, `p-value` = `Pr(>|t|)`)
+    return(coefs_df)
+  }
+
+  # Tablas de resultados
+  table_sha <- extract_model_table(best_sha, "Shannon")
+  table_obs <- extract_model_table(best_obs, "Observed")
+  table_simp <- extract_model_table(best_simp, "Simpson")
+
+  result_tables <- list(table_sha, table_obs, table_simp)
+  result_tables <- result_tables[!sapply(result_tables, is.null)]
+
+  if (length(result_tables) == 0) {
+    message(paste("⚠️ No valid model terms for", variable_interes, "in", subset_name, "- skipping"))
+    return(NULL)
+  }
+
+  results_df <- bind_rows(result_tables)
+
+  # Agregar asteriscos a p < 0.05
+  results_df$`p-value` <- ifelse(as.numeric(gsub("\\*", "", results_df$`p-value`)) < 0.05,
+                                 paste0(formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4), "*"),
+                                 formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4))
+
+  # --- 4. Visualización ---
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", shannon_boxcox, simpson, observed)
+
+  p1 <- ggplot(met_long, aes_string(x = variable_interes, y = "value", color = "study_group")) +
+    geom_point(size = 3, alpha = 0.7) +
+    geom_smooth(method = "lm", se = TRUE, color = "black") +
+    facet_wrap(~measure, scales = "free_y") +
+    labs(title = variable_interes,
+         x = variable_interes,
+         y = "Vaginal Alpha Diversity",
+         color = "Study Group") +
+    scale_color_manual(values = palette) +
+    theme_prism(base_size = 16) +
+    theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  # --- 5. Guardar resultados ---
+  fecha_actual <- Sys.Date()
+  dir_path <- file.path("results", "alpha", as.character(fecha_actual), "oral", subset_name)
+  dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+
+  ggsave(file.path(dir_path, paste0("alpha_oral_plot_", variable_interes, ".pdf")),
+         plot = p1, width = 10, height = 5.5)
+
+  write.csv(results_df,
+            file = file.path(dir_path, paste0("alpha_model_results_", variable_interes, ".csv")),
+            row.names = FALSE)
+}
+
+# --- 6. Subgrupos ---
+met_white <- met %>%
+  filter(race == "White/Caucasian", ethnicity == "Not Hispanic/Latina")
+
+met_hispanic <- met %>%
+  filter(ethnicity == "Hispanic/Latina")
+
+# --- 7. Ejecutar análisis para cada grupo y variable ---
+vars <- c("ppsystolic", "ppdiastolic")
+
+for (v in vars) {
+  generar_grafico_continuo(v, met_white, "White")
+  generar_grafico_continuo(v, met_hispanic, "Hispanic")
+}
+
+
+```
+# 3 boxplots of BP
+
+```{r}
+
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="Vaginal")
+
+met <- data.frame(sample_data(phy))
+
+library(ggplot2)
+library(dplyr)
+
+# Filtrar base
+met_plot <- met %>%
+  dplyr::select(study_id, severe_3cat, ppsystolic, ppdiastolic, study_group) %>%
+  drop_na()
+
+# Asegúrate de que severe_3cat es factor con orden correcto
+met_plot$severe_3cat <- factor(met_plot$severe_3cat, levels = c("control", "No", "Yes"))
+
+# Definir paleta si quieres usar los mismos colores que para PE vs Control
+palette_fill <- c("control" = "#5a9bd4", "No" = "orange", "Yes" = "#CC3300")
+
+# Boxplot para ppsystolic
+p_sys <- ggplot(met_plot, aes(x = severe_3cat, y = ppsystolic, fill = severe_3cat)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(width = 0.15, alpha = 0.6, size = 2, color = "black") +
+ scale_fill_manual(values = palette_fill) +
+  scale_color_manual(values = palette_fill) +  labs(title = "Systolic Blood Pressure by Severity",
+       x = "Severity Category",
+       y = "Postpartum Systolic BP") +
+  theme_bw(base_size = 14) +
+  theme(legend.title = element_blank())
+
+# Boxplot para ppdiastolic
+p_dia <- ggplot(met_plot, aes(x = severe_3cat, y = ppdiastolic, fill = severe_3cat)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(width = 0.15, alpha = 0.6, size = 2, color = "black") +
+ scale_fill_manual(values = palette_fill) +
+  scale_color_manual(values = palette_fill) +
+  labs(title = "Diastolic Blood Pressure by Severity",
+       x = "Severity Category",
+       y = "Postpartum Diastolic BP") +
+  theme_bw(base_size = 14) +
+  theme(legend.title = element_blank())
+
+# Guardar los gráficos
+output_dir <- file.path("..", "results", "bp_boxplots", as.character(Sys.Date()), "vaginal")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+ggsave(filename = file.path(output_dir, "systolic_bp_by_severity.pdf"),
+       plot = p_sys, width = 4, height = 4)
+
+ggsave(filename = file.path(output_dir, "diastolic_bp_by_severity.pdf"),
+       plot = p_dia, width = 4, height = 4)
+
+print(p_sys)
+
+print(p_dia)
+```
+
+
+
+# only for simpson since is not normal
+
+```{r}
+
+phy<- PHYrar_alpha_ggext_subset02_newseqs
+
+phy= subset_samples(phy, body_site=="MomTongue")
+library(MASS)
+met <- data.frame(sample_data(phy))
+
+# Define the actual variable name as a string
+variable_interes <- "study_group"  # Replace with the actual column name
+
+# Construct the formula dynamically
+formula_simp <- as.formula(paste("simpson ~", variable_interes, "+ bmi + antibiotics_during_pregnancy + ethnicity"))
+
+# Fit the robust linear model
+rlm_simp <- rlm(formula_simp, data = met)
+
+# Function to calculate results for a model, including p-values
+calculate_model_results <- function(model, model_name) {
+    t_vals <- summary(model)$coefficients[, "t value"]
+    df <- length(model$residuals) - length(model$coefficients)
+    p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+    results <- data.frame(
+        Model = rep(model_name, length(t_vals)),
+        Term = rownames(summary(model)$coefficients),
+        Estimate = summary(model)$coefficients[, "Value"],
+        Std_Error = summary(model)$coefficients[, "Std. Error"],
+        t_value = t_vals,
+        p_value = p_vals
+    )
+    return(results)
+}
+
+# Calculate results for the Simpson model
+simp_results <- calculate_model_results(rlm_simp, "Simpson")
+
+# Print and save the results
+print(simp_results)
+
+# Save the results in the appropriate directory
+fecha_actual <- Sys.Date()
+dir.create(paste0("results/alpha/", as.character(fecha_actual), "/oral"), recursive = TRUE)
+
+# Save the results as a CSV file
+write.csv(simp_results, file = paste0("results/alpha/", as.character(fecha_actual), "/oral/RLM_simpson.csv"), row.names = FALSE)
+
+
+
+
+```
+
+
+Se escribe la variable de interés y se busca el archivo con el numbre la fecha en el que se corrió
+
+```{r}
+table(met$study_group)
+table(met$severe)
+table(met$severe_3cat)
+```
+```{r}
+# # Ajustar los modelos
+# mod_sha <- lm(log(shannon) ~ study_group*bmi , data = met1)
+# mod_obs <- lm(log(observed) ~ study_group*bmi, data = met1)
+# mod_simp <- lm(simpson ~ study_group*bmi , data = met1)
+# 
+# 
+# # Nombrar el mejor modelo ajustado
+# best_sha <- summary(mod_sha)
+# best_obs <- summary(mod_obs)
+# best_simp <- summary(mod_simp)
+# 
+# # Imprimir los resúmenes de los mejores modelos ajustados
+# print(best_sha)
+# print(best_obs)
+# print(best_simp)
+
+```
+La colinearidad se evalua con factores de inflación de la varianza (VIF). Valores cercanos a 1 indica no colinearidad, aunque t-test de significativo (no indica colinearidad).
+Tambien el modelo de interaccion tampoco es signnificativo para study group, solo para BMI pero igual probemos con un modelo de Propensity Score 
+```{r}
+# t.test(met$bmi~met$study_group)
+# 
+# model <- lm(observed ~ bmi * study_group, data = met)
+# 
+# # Resumen del modelo
+# summary(model)
+# 
+# # Calcular los VIF
+# vif_values <- vif(model)
+# print(vif_values)
+# 
+# 
+# #### now for term_status
+# install.packages("FactoMineR")
+# library(FactoMineR)
+# 
+# # Realizar un análisis de correspondencia múltiple
+# mca_result <- MCA(met[, c( "study_group")], graph = TRUE)
+# 
+# # Mostrar los resultados del MCA
+# print(mca_result)
+# 
+# table(met$term_status, met$study_group)
+
+```
+Para comprobar la significancia de BMI que no este mezclada con la de study_group.
+Modelo de Propensity Score que permite obtener valores equivalentes de bmi para ambos groups.
+
+
+ With the addition of the term_status variable into the formula, now 3 taxa were significant for study group, but none of those from the previous analysis result. Among these 3 taxa only s__Peptoniphilus_A_lacydonensis was unique from study group (lower mean PE group compared to control, p=0.022, padj=0.193), in other words, this bacteria was not significant for any other variable only for study group (Figure2_v2).
+
+We will have to explore the meaning of this Peptoniphilus species
+```{r}
+library(MatchIt)
+met$study_group <- ifelse(met$study_group == "Control", 0, 1)
+
+# Crear el modelo de Propensity Score
+ps_model <- matchit(study_group ~ bmi, data = met, method = "nearest")
+
+# Obtener los datos emparejados
+matched_data <- match.data(ps_model)
+
+# Realizar el análisis en los datos emparejados
+matched_model <- lm(observed ~ study_group, data = matched_data)
+summary(matched_model)
+```
+Conclusion: study groups no es significativo para observed ASVs

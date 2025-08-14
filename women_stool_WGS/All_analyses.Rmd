@@ -1,0 +1,5052 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+All microbiome analyses for WGS from women stool samples
+
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+    
+```
+
+# LOAD packages
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(data.table)
+library(purrr)
+library(forcats)
+library(vegan)
+library(tidyverse)
+library(reshape2)
+library(emmeans)
+library(usedist)
+library(compositions)
+library(phyloseq)
+library(ape)
+library(ggprism)
+library(MASS)
+library(ggpubr)
+
+
+#library(pairwiseAdonis)
+```
+
+
+# LOAD data
+```{r}
+
+##only for sp and genus barplots
+met=read.csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/met/met_div_rel_sp_gtdb_mom.csv")
+met_g <- read.csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/met/met_div_rel_gen_gtdb_mom.csv")
+met$study_id <- paste0("X", met$study_id)
+met_g$study_id <- paste0("X", met_g$study_id)
+# cambiar study_group por sg
+met$sg <- met$study_group
+met_g$sg <- met$study_group
+table(met$sg)
+```
+
+# Barplot Species
+```{r}
+# Paso 1: Seleccionar columnas de taxonomía y metadatos
+# Identificar las columnas que representan taxonomías, comienzan con "s__"
+taxa_columns <- grepl("^s__", colnames(met))
+dim(met)
+# Separar metadatos y datos de taxonomía para tratarlos por separado
+metadata <- met[, !taxa_columns]  # Metadatos
+taxa_data <- met[, taxa_columns]  # Taxonomías
+
+# Paso 2: Convertir la tabla de taxonomía a formato largo (melt)
+# Esto permite que cada fila represente una combinación de individuo y taxón
+# `pivot_longer` reorganiza columnas de taxonomía en dos: `Taxa` y `Abundance`
+taxa_long <- taxa_data %>%
+  mutate(study_id = metadata$study_id) %>%  # Agregar identificador de estudio
+  pivot_longer(
+    cols = starts_with("s__"), 
+    names_to = "Taxa", 
+    values_to = "Abundance"
+  )
+
+# Paso 3: Agrupar taxonomías con abundancias <20% como "Other"
+# Las taxonomías poco abundantes se agrupan para simplificar la visualización
+taxa_long <- taxa_long %>%
+  group_by(study_id) %>%  # Agrupar por individuo
+  mutate(
+    Taxa = ifelse(Abundance < 10, "Other", Taxa)  # Reasignar "Other" si <20%
+  ) %>%
+  group_by(study_id, Taxa) %>%  # Volver a agrupar considerando "Other"
+  summarise(Abundance = sum(Abundance), .groups = "drop")  # Sumar abundancias
+
+# Paso 4: Normalizar las abundancias para que sumen 100% por individuo
+taxa_long <- taxa_long %>%
+  group_by(study_id) %>%
+  mutate(Abundance = 100 * Abundance / sum(Abundance)) %>%
+  ungroup()
+
+# Paso 5: Ordenar los individuos por la abundancia de s__Prevotella.copri
+# Incluir todos los study_id y ordenar por abundancia de s__Prevotella.copri
+study_order <- taxa_long %>%
+  filter(Taxa == "s__Prevotella.copri") %>%  # Filtrar solo la taxonomía de interés
+  arrange(desc(Abundance)) %>%  # Ordenar por abundancia descendente
+  pull(study_id)  # Extraer el orden de los identificadores de estudio
+
+# Asegurar que todos los study_id estén incluidos
+study_order <- c(study_order, setdiff(unique(taxa_long$study_id), study_order))
+
+# Aplicar el orden al factor study_id
+taxa_long$study_id <- factor(taxa_long$study_id, levels = study_order)
+
+# Paso 6: Asignar colores a las taxonomías
+# Crear un vector de colores para las taxonomías identificadas
+unique_taxa <- unique(taxa_long$Taxa)
+colores <- c(
+  "steelblue", "lightcoral", "mediumseagreen", "slateblue", "goldenrod",
+  "cadetblue", "tomato", "darkolivegreen", "orchid", "cornflowerblue",
+  "darkkhaki", "turquoise", "salmon", "grey", "mediumorchid",
+  "lightgreen", "skyblue", "sandybrown", "plum", "lightsteelblue",
+  "peru", "darkturquoise", "rosybrown", "mediumaquamarine",
+  "palevioletred", "lightblue", "darkgrey", "thistle",
+  "tan", "lightslategray", "aquamarine", "indianred", "mediumslateblue",
+  "darkseagreen", "lightpink", "burlywood",
+  "powderblue", "firebrick", "navajowhite", "seagreen", "dodgerblue", "moccasin",
+  "chartreuse", "darkorange", "deeppink", "gold", "lavender", "palegreen",
+  "gray", "magenta", "deepskyblue", "blue", "forestgreen", "royalblue4",
+  "mediumspringgreen", "gold3", "darkorange1", "saddlebrown", "slategray2",
+  "snow4", "darkgoldenrod1", "lemonchiffon", "darkorchid", "lightskyblue",
+  "khaki2", "brown1", "cyan3", "royalblue2", "darksalmon", "green3",
+  "purple3", "pink", "chocolate1", "coral", "coral3", "darkcyan",
+  "mediumpurple3", "bisque4"
+)
+assigned_colors <- setNames(colores[1:length(unique_taxa)], unique_taxa)  # Asignar colores
+
+# Paso 7: Crear el barplot
+# Visualizar composición de taxonomía por individuo
+p <- ggplot(taxa_long, aes(x = study_id, y = Abundance, fill = Taxa)) +
+  geom_bar(stat = "identity", position = "stack") +  # Barras apiladas
+  scale_fill_manual(values = assigned_colors) +  # Colores personalizados
+  theme_minimal() +  # Estilo limpio
+  labs(
+    title = "Taxonomy Composition by Individual",
+    x = "Individual (study_id)",
+    y = "Relative Abundance (%)",
+    fill = "Taxa"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotar etiquetas del eje x
+
+# Mostrar el gráfico
+print(p)
+
+```
+
+# Barplot Genus
+
+```{r}
+
+
+# Paso 1: Seleccionar columnas de taxonomía y metadatos
+# Identificar las columnas que representan taxonomías, comienzan con "g__"
+taxa_columns <- grepl("^g__", colnames(met_g))
+
+# Mantener todas las columnas, incluyendo las taxonomías y el estudio
+taxa_data <- met_g  
+
+# Paso 2: Convertir la tabla de taxonomía a formato largo (melt)
+# Esto permite que cada fila represente una combinación de individuo y taxón
+# `pivot_longer` reorganiza columnas de taxonomía en dos: `Taxa` y `Abundance`
+taxa_long <- taxa_data %>%
+  pivot_longer(
+    cols = starts_with("g__"), 
+    names_to = "Taxa", 
+    values_to = "Abundance"
+  ) %>%
+  select(study_id, sg, Taxa, Abundance)  # Mantener sg y otras columnas necesarias
+
+# Paso 3: Agrupar taxonomías con abundancias por debajo del umbral como "Other"
+# Definir un umbral para la agrupación
+taxa_threshold <- 5
+
+# Las taxonomías poco abundantes se agrupan para simplificar la visualización
+taxa_long <- taxa_long %>%
+  group_by(study_id, sg) %>%  # Incluir sg en el agrupamiento
+  mutate(
+    Taxa = ifelse(Abundance < taxa_threshold, "<5%", Taxa)  # Reasignar "Other" si debajo del umbral
+  ) %>%
+  group_by(study_id, sg, Taxa) %>%  # Volver a agrupar considerando "Other"
+  summarise(Abundance = sum(Abundance), .groups = "drop")  # Sumar abundancias
+
+# Paso 4: Normalizar las abundancias para que sumen 100% por individuo
+taxa_long <- taxa_long %>%
+  group_by(study_id, sg) %>%
+  mutate(Abundance = 100 * Abundance / sum(Abundance)) %>%
+  ungroup()
+
+# Paso 5: Ordenar taxonomías por abundancia general para priorizar las más abundantes en la base
+# Calcular el orden de las taxonomías según su abundancia total
+taxa_order <- taxa_long %>%
+  group_by(Taxa) %>%
+  summarise(Total_Abundance = sum(Abundance), .groups = "drop") %>%
+  arrange(desc(Total_Abundance)) %>%
+  pull(Taxa)
+
+# Aplicar el orden al factor Taxa
+taxa_long$Taxa <- factor(taxa_long$Taxa, levels = taxa_order)
+
+# Paso 6: Asignar colores a las taxonomías
+# Crear un vector de colores para las taxonomías identificadas
+unique_taxa <- unique(taxa_long$Taxa)
+colores <- c(
+  "steelblue", "lightcoral", "mediumseagreen", "slateblue", "goldenrod",
+  "cadetblue", "tomato", "darkolivegreen", "orchid", "cornflowerblue",
+  "darkkhaki", "turquoise", "salmon", "grey", "mediumorchid",
+  "lightgreen", "skyblue", "sandybrown", "plum", "lightsteelblue",
+  "peru", "darkturquoise", "rosybrown", "mediumaquamarine",
+  "palevioletred", "lightblue", "darkgrey", "thistle",
+  "tan", "lightslategray", "aquamarine", "indianred", "mediumslateblue",
+  "darkseagreen", "lightpink", "burlywood",
+  "powderblue", "firebrick", "navajowhite", "seagreen", "dodgerblue", "moccasin",
+  "chartreuse", "darkorange", "deeppink", "gold", "lavender", "palegreen",
+  "gray", "magenta", "deepskyblue", "blue", "forestgreen", "royalblue4",
+  "mediumspringgreen", "gold3", "darkorange1", "saddlebrown", "slategray2",
+  "snow4", "darkgoldenrod1", "lemonchiffon", "darkorchid", "lightskyblue",
+  "khaki2", "brown1", "cyan3", "royalblue2", "darksalmon", "green3",
+  "purple3", "pink", "chocolate1", "coral", "coral3", "darkcyan",
+  "mediumpurple3", "bisque4"
+)
+assigned_colors <- setNames(colores[1:length(unique_taxa)], unique_taxa)  # Asignar colores
+
+taxa_long$study_id <- as.factor(taxa_long$study_id)
+
+# Paso 7: Crear el barplot
+# Visualizar composición de taxonomía por individuo
+p <- ggplot(taxa_long, aes(x = study_id, y = Abundance, fill = Taxa)) +
+  geom_bar(stat = "identity", position = "stack") +  # Barras apiladas
+  scale_fill_manual(values = assigned_colors) +  # Colores personalizados
+  theme_minimal() +  # Estilo limpio
+  labs(
+    title = "Genus-Level Taxonomy Composition by Individual",
+    x = "Individual (study_id)",
+    y = "Relative Abundance (%)",
+    fill = "Taxa"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  facet_wrap(~sg, scales = "free") 
+
+# Mostrar el gráfico
+print(p)
+
+```
+
+# Alpha div
+Descomentar paletta de colores segun el variable a correr
+```{r}
+
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+#extract metadata from phyloseq object
+
+
+met <- data.frame(sample_data(phy))
+met$sha
+table(met$study_group)
+met$study_group
+shapiro.test(met$sha)
+
+
+# Aplicar Box-Cox a la columna 'shannon'
+boxcox_shannon <- boxcox(met$sha ~ 1, plotit = FALSE)
+lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+met$shannon_boxcox <- (met$sha ^ lambda_shannon - 1) / lambda_shannon
+
+shapiro.test(met$shannon_boxcox)
+
+# Aplicar Box-Cox a la columna 'simp'
+
+
+# Función para crear el gráfico y guardar los resultados
+generar_grafico <- function(variable_interes) {
+  # Filtrar los datos
+  met0 <- met %>%
+    dplyr::select(study_id, obs, shannon_boxcox, simp, bmi, !!sym(variable_interes), antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+  
+  # Crear fórmulas dinámicas
+  formula_sha <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes,  "bmi",  "antibiotics_during_pregnancy","ethnicity"), response = "obs")
+  formula_simp <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy","ethnicity"), response = "simp")
+  
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met0)
+  mod_obs <- lm(formula_obs, data = met0)
+  mod_simp <- lm(formula_simp, data = met0)
+  
+  # Verificar la normalidad de los residuos (opcional)
+  print(shapiro.test(mod_sha$residuals))
+  print(shapiro.test(mod_obs$residuals))
+  print(shapiro.test(mod_simp$residuals))
+  
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+  
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+  
+  # Imprimir los resúmenes de los mejores modelos ajustados
+  print(best_sha)
+  print(best_obs)
+  print(best_simp)
+  
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+  #palette <- c("Yes" = "red", "No" = "orange")
+  #palette <- c("Yes" = "red", "No" = "orange", "control"="#5a9bd4")
+  #palette <- c("Cesarean Delivery" = "orange", "Vaginal Delivery" = "blue")
+  
+  
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+  
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met0, key = "measure", value = "value", shannon_boxcox, simp, obs)
+  
+  # Crear el gráfico usando `aes()` con evaluación tidy
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = variable_interes, 
+         x = variable_interes, 
+         y = "Vaginal Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+  
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("results/alpha/", as.character(fecha_actual)), recursive = TRUE)
+  
+  # Guardar el gráfico en PDF
+  ggsave(paste0("results/alpha/", as.character(fecha_actual), "/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+  
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("results/alpha/", as.character(fecha_actual), "/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("results/alpha/", as.character(fecha_actual), "/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("results/alpha/", as.character(fecha_actual), "/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Llamar a la función para generar el gráfico y ajustar los modelos
+#generar_grafico("study_group")
+#generar_grafico("sg")
+generar_grafico("severe")
+#generar_grafico("severe_3cat")
+
+```
+# Alpha stool Blood Pressure 
+
+```{r setup, include=FALSE}
+# --- 1. Leer objeto phyloseq ---
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# --- 2. Preparar metadata ---
+met <- data.frame(sample_data(phy))
+met$study_id <- rownames(met)
+shapiro.test(met$obs)
+
+# --- 3. Transformación Box-Cox de sha ---
+boxcox_sha <- boxcox(met$sha ~ 1, plotit = FALSE)
+lambda_sha <- boxcox_sha$x[which.max(boxcox_sha$y)]
+met$sha_boxcox <- (met$sha ^ lambda_sha - 1) / lambda_sha
+
+# --- 4. Función para análisis continuo ---
+generar_grafico_continuo <- function(variable_interes) {
+  met1 <- met %>%
+    dplyr::select(study_id, obs, sha_boxcox, simp,
+                  bmi, !!sym(variable_interes),
+                  antibiotics_during_pregnancy, ethnicity, study_group) %>%
+    drop_na()
+
+  if (nrow(met1) < 5) {
+    message(paste("⚠️ Too few samples for", variable_interes, "- skipping"))
+    return(NULL)
+  }
+
+  formula_sha <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "sha_boxcox")
+  formula_obs <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "log(obs)")
+  formula_simp <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy", "ethnicity"), response = "simp")
+
+  best_sha <- step(lm(formula_sha, data = met1), trace = 0)
+  best_obs <- step(lm(formula_obs, data = met1), trace = 0)
+  best_simp <- step(lm(formula_simp, data = met1), trace = 0)
+
+  extract_model_table <- function(model, diversity_metric) {
+    coefs_df <- as.data.frame(summary(model)$coefficients)
+    coefs_df$Model_Term <- rownames(coefs_df)
+    coefs_df <- coefs_df[coefs_df$Model_Term != "(Intercept)", ]
+    if (nrow(coefs_df) == 0) return(NULL)
+
+    coefs_df$`Body Site` <- "Stool"
+    coefs_df$`Diversity Metric` <- diversity_metric
+    coefs_df$`Population Subset` <- "All Subjects"
+    coefs_df$`Analysis Focus` <- variable_interes
+    coefs_df <- coefs_df %>%
+      dplyr::select(`Body Site`, `Diversity Metric`, `Population Subset`, `Analysis Focus`,
+                    Model_Term, Estimate = Estimate, `Std. Error` = `Std. Error`,
+                    `t value` = `t value`, `p-value` = `Pr(>|t|)`)
+    return(coefs_df)
+  }
+
+  table_sha <- extract_model_table(best_sha, "sha")
+  table_obs <- extract_model_table(best_obs, "obs")
+  table_simp <- extract_model_table(best_simp, "simp")
+
+  result_tables <- list(table_sha, table_obs, table_simp)
+  result_tables <- result_tables[!sapply(result_tables, is.null)]
+
+  if (length(result_tables) == 0) {
+    message(paste("⚠️ No valid model terms for", variable_interes, "- skipping"))
+    return(NULL)
+  }
+
+  results_df <- bind_rows(result_tables)
+
+  results_df$`p-value` <- ifelse(as.numeric(gsub("\\*", "", results_df$`p-value`)) < 0.05,
+                                 paste0(formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4), "*"),
+                                 formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4))
+
+  # --- Guardar resultados ---
+  fecha_actual <- Sys.Date()
+ dir_path <- file.path("..", "results", "alpha", as.character(fecha_actual), "stool", "All_Subjects")
+  dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+
+  write.csv(results_df,
+            file = file.path(dir_path, paste0("alpha_model_results_", variable_interes, ".csv")),
+            row.names = FALSE)
+
+  # --- Visualización ---
+  met1$study_group <- met$study_group[match(met1$study_id, met$study_id)]
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", sha_boxcox, simp, obs)
+
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+  p1 <- ggplot(met_long, aes_string(x = variable_interes, y = "value", color = "study_group")) +
+    geom_point(size = 3, alpha = 0.9) +
+    geom_smooth(method = "lm", se = TRUE, color = "black") +
+    facet_wrap(~measure, scales = "free_y") +
+    labs(title = variable_interes,
+         x = variable_interes,
+         y = "Stool Alpha Diversity",
+         color = "Study Group") +
+    scale_color_manual(values = palette) +
+    theme_prism(base_size = 16) +
+    theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  ggsave(file.path(dir_path, paste0("alpha_stool_plot_", variable_interes, ".pdf")),
+         plot = p1, width = 10, height = 5.5)
+}
+
+# --- Ejecutar ---
+generar_grafico_continuo("ppsystolic")
+generar_grafico_continuo("ppdiastolic")
+
+
+
+```
+# Alpha stool blood pressure solo para simpson RLM
+
+
+```{r setup, include=FALSE}
+# --- 1. Leer objeto phyloseq ---
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# --- 2. Preparar metadata ---
+met <- data.frame(sample_data(phy))
+met$study_id <- rownames(met)
+
+# --- Función para análisis rlm de simpson ---
+generar_rlm_simpson <- function(phy_object, variable_interes, site_label = "oral", subset_name = "All_Subjects") {
+  
+  met <- data.frame(sample_data(phy_object))
+  met$study_id <- rownames(met)
+
+  # Verificar que exista la variable de interés
+  if (!variable_interes %in% colnames(met)) {
+    stop(paste("Variable", variable_interes, "not found in metadata"))
+  }
+
+  # Filtrar NAs
+  met1 <- met %>%
+    dplyr::select(simp, !!sym(variable_interes), bmi, antibiotics_during_pregnancy, ethnicity, study_group) %>%
+    drop_na()
+
+  if (nrow(met1) < 5) {
+    message(paste("⚠️ Too few samples for", variable_interes, "- skipping"))
+    return(NULL)
+  }
+
+  # Crear fórmula y correr modelo
+  formula_simp <- as.formula(paste("simp ~", variable_interes, " + antibiotics_during_pregnancy + ethnicity"))
+  model <- rlm(formula_simp, data = met1)
+
+  # Calcular p-valores manualmente
+  t_vals <- summary(model)$coefficients[, "t value"]
+  df <- length(model$residuals) - length(model$coefficients)
+  p_vals <- 2 * (1 - pt(abs(t_vals), df = df))
+
+  results_df <- data.frame(
+    `Body Site` = site_label,
+    `Diversity Metric` = "Simp",
+    `Population Subset` = subset_name,
+    `Analysis Focus` = variable_interes,
+    Model_Term = rownames(summary(model)$coefficients),
+    Estimate = model$coefficients,
+    `Std. Error` = summary(model)$coefficients[, "Std. Error"],
+    `t value` = t_vals,
+    `p-value` = ifelse(p_vals < 0.05,
+                       paste0(formatC(p_vals, format = "f", digits = 4), "*"),
+                       formatC(p_vals, format = "f", digits = 4))
+  )
+
+  # --- Guardar ---
+  fecha_actual <- Sys.Date()
+  dir_path <- file.path("..","results", "alpha", as.character(fecha_actual), site_label, subset_name)
+  dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+
+  write.csv(results_df,
+            file = file.path(dir_path, paste0("rlm_simpson_", variable_interes, ".csv")),
+            row.names = FALSE)
+
+  return(results_df)
+}
+
+
+generar_rlm_simpson(phy_object = phy, variable_interes = "ppsystolic", site_label = "stool")
+generar_rlm_simpson(phy_object = phy, variable_interes = "ppdiastolic", site_label = "stool")
+
+
+```
+
+# Alpha stool by ethnicity blood pressure
+```{r}
+# --- 1. Leer objeto phyloseq ---
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# --- 2. Preparar metadata con transformación ---
+met <- data.frame(sample_data(phy))
+met$study_id <- rownames(met)
+met$obs
+# Calcular sha_boxcox
+boxcox_sha <- boxcox(met$sha ~ 1, plotit = FALSE)
+lambda_sha <- boxcox_sha$x[which.max(boxcox_sha$y)]
+met$sha_boxcox <- (met$sha ^ lambda_sha - 1) / lambda_sha
+
+
+# --- 3. Subgrupos por etnicidad ---
+met_white <- met %>%
+  filter(race == "White/Caucasian", ethnicity == "Not Hispanic/Latina")
+
+met_hispanic <- met %>%
+  filter(ethnicity == "Hispanic/Latina")
+
+# --- 4. Función para análisis continuo (sin ethnicity como covariable) ---
+generar_grafico_continuo <- function(variable_interes, met_sub, subset_name = "All_Subjects") {
+  met1 <- met_sub %>%
+    dplyr::select(all_of(c("study_id", "obs", "sha_boxcox", "simp",
+                           "bmi", variable_interes,
+                           "antibiotics_during_pregnancy", "study_group"))) %>%
+    drop_na()
+
+  if (nrow(met1) < 5) {
+    message(paste("⚠️ Too few samples for", variable_interes, "in", subset_name, "- skipping"))
+    return(NULL)
+  }
+
+  formula_sha <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "sha_boxcox")
+  formula_obs <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "log(obs)")
+  formula_simp <- reformulate(c(variable_interes, "bmi", "antibiotics_during_pregnancy"), response = "simp")
+
+  best_sha <- step(lm(formula_sha, data = met1), trace = 0)
+  best_obs <- step(lm(formula_obs, data = met1), trace = 0)
+  best_simp <- step(lm(formula_simp, data = met1), trace = 0)
+
+  extract_model_table <- function(model, diversity_metric) {
+    coefs_df <- as.data.frame(summary(model)$coefficients)
+    coefs_df$Model_Term <- rownames(coefs_df)
+    coefs_df <- coefs_df[coefs_df$Model_Term != "(Intercept)", ]
+    if (nrow(coefs_df) == 0) return(NULL)
+
+    coefs_df$`Body Site` <- "Stool"
+    coefs_df$`Diversity Metric` <- diversity_metric
+    coefs_df$`Population Subset` <- subset_name
+    coefs_df$`Analysis Focus` <- variable_interes
+    coefs_df <- coefs_df %>%
+      dplyr::select(`Body Site`, `Diversity Metric`, `Population Subset`, `Analysis Focus`,
+                    Model_Term, Estimate = Estimate, `Std. Error` = `Std. Error`,
+                    `t value` = `t value`, `p-value` = `Pr(>|t|)`)
+    return(coefs_df)
+  }
+
+  table_sha <- extract_model_table(best_sha, "sha")
+  table_obs <- extract_model_table(best_obs, "obs")
+  table_simp <- extract_model_table(best_simp, "simp")
+
+  result_tables <- list(table_sha, table_obs, table_simp)
+  result_tables <- result_tables[!sapply(result_tables, is.null)]
+
+  if (length(result_tables) == 0) {
+    message(paste("⚠️ No valid model terms for", variable_interes, "in", subset_name, "- skipping"))
+    return(NULL)
+  }
+
+  results_df <- bind_rows(result_tables)
+
+  results_df$`p-value` <- ifelse(as.numeric(gsub("\\*", "", results_df$`p-value`)) < 0.05,
+                                 paste0(formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4), "*"),
+                                 formatC(as.numeric(gsub("\\*", "", results_df$`p-value`)), format = "f", digits = 4))
+
+  # --- Guardar resultados ---
+  fecha_actual <- Sys.Date()
+  dir_path <- file.path("..", "results", "alpha", as.character(fecha_actual), "stool", subset_name)
+  dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+
+  write.csv(results_df,
+            file = file.path(dir_path, paste0("alpha_model_results_", variable_interes, ".csv")),
+            row.names = FALSE)
+
+  # --- Visualización ---
+  met1$study_group <- met_sub$study_group[match(met1$study_id, met_sub$study_id)]
+  met_long <- tidyr::gather(met1, key = "measure", value = "value", sha_boxcox, simp, obs)
+
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+  p1 <- ggplot(met_long, aes_string(x = variable_interes, y = "value", color = "study_group")) +
+    geom_point(size = 3, alpha = 0.9) +
+    geom_smooth(method = "lm", se = TRUE, color = "black") +
+    facet_wrap(~measure, scales = "free_y") +
+    labs(title = variable_interes,
+         x = variable_interes,
+         y = "Stool Alpha Diversity",
+         color = "Study Group") +
+    scale_color_manual(values = palette) +
+    theme_prism(base_size = 16) +
+    theme(axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 14),
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  ggsave(file.path(dir_path, paste0("alpha_stool_plot_", variable_interes, ".pdf")),
+         plot = p1, width = 10, height = 5.5)
+}
+
+# --- 5. Ejecutar ---
+vars <- c("ppsystolic", "ppdiastolic")
+
+for (v in vars) {
+  generar_grafico_continuo(v, met_white, "White")
+  generar_grafico_continuo(v, met_hispanic, "Hispanic")
+}
+
+
+```
+
+
+# Alpha HISPANICS and WHITES
+Since Whites have a not notmal distribution, the boxcoc transformation is only applied to them
+```{r}
+library("MASS")
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+# #extraer metadata
+# met <- data.frame(sample_data(phy))
+# met1=subset(met, ethnicity=="Hispanic/Latina")
+# met1=subset(met, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+
+# Define groups
+groups <- list(
+  "Hispanic_Latina" = subset_samples(phy, ethnicity == "Hispanic/Latina"),
+  "White_Not_Hispanic" = subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+)
+
+# Función para generar gráficos y modelos por grupo
+generar_grafico_por_grupo <- function(group_name, phy_group, variable_interes) {
+  met <- data.frame(sample_data(phy_group))
+
+  # Aplicar Box-Cox solo para White_Not_Hispanic
+  if (group_name == "White_Not_Hispanic") {
+    boxcox_shannon <- boxcox(met$sha ~ 1, plotit = FALSE)
+    lambda_shannon <- boxcox_shannon$x[which.max(boxcox_shannon$y)]
+    met$shannon_boxcox <- (met$sha ^ lambda_shannon - 1) / lambda_shannon
+  } else {
+    met$shannon_boxcox <- met$sha
+  }
+
+  # Filtrar los datos
+  met0 <- met %>%
+    dplyr::select(study_id, obs, shannon_boxcox, simp, bmi, !!sym(variable_interes), antibiotics_during_pregnancy, ethnicity) %>%
+    drop_na()
+
+  # Crear fórmulas dinámicas
+  formula_sha <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy"), response = "shannon_boxcox")
+  formula_obs <- reformulate(c(variable_interes,  "bmi",  "antibiotics_during_pregnancy"), response = "obs")
+  formula_simp <- reformulate(c(variable_interes,  "bmi", "antibiotics_during_pregnancy"), response = "simp")
+
+  # Ajustar los modelos
+  mod_sha <- lm(formula_sha, data = met0)
+  mod_obs <- lm(formula_obs, data = met0)
+  mod_simp <- lm(formula_simp, data = met0)
+
+  # Elegir el mejor modelo ajustado usando stepwise
+  mod_best_sha <- step(mod_sha)
+  mod_best_obs <- step(mod_obs)
+  mod_best_simp <- step(mod_simp)
+
+  # Nombrar el mejor modelo ajustado
+  best_sha <- summary(mod_best_sha)
+  best_obs <- summary(mod_best_obs)
+  best_simp <- summary(mod_best_simp)
+
+  # Crear la paleta de colores
+  palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+  palette_colors <- scale_fill_manual(values = palette, name = variable_interes)
+
+  # Convertir los datos a formato largo
+  met_long <- tidyr::gather(met0, key = "measure", value = "value", shannon_boxcox, simp, obs)
+
+  # Crear el gráfico
+  p1 <- ggplot(met_long, aes(x = !!sym(variable_interes), y = value, fill = !!sym(variable_interes))) + 
+    geom_boxplot(outlier.shape = NA) +  
+    geom_jitter(position = position_jitter(width = 0), size = 3, alpha = 0.6) + 
+    facet_wrap(~measure, scales = "free_y") + 
+    labs(title = paste(group_name, "-", variable_interes), 
+         x = variable_interes, 
+         y = "Vaginal Alpha Diversity") + 
+    palette_colors + 
+    theme_prism(base_size = 16) + 
+    theme(axis.text.x = element_text(size = 14), 
+          axis.text.y = element_text(size = 14), 
+          axis.title.x = element_text(size = 16),
+          axis.title.y = element_text(size = 16),
+          plot.title = element_text(size = 18),
+          strip.text = element_text(size = 16),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14))
+
+  # Crear carpeta con la fecha actual
+  fecha_actual <- Sys.Date()
+  dir.create(paste0("results/alpha/", as.character(fecha_actual), "/", group_name), recursive = TRUE)
+
+  # Guardar el gráfico en PDF
+  ggsave(paste0("results/alpha/", as.character(fecha_actual), "/", group_name, "/alpha_vag_plot_", variable_interes, ".pdf"), plot = p1, width = 10, height = 5.5)
+
+  # Guardar los resúmenes de los mejores modelos ajustados en archivos de texto
+  capture.output(best_sha, file = paste0("results/alpha/", as.character(fecha_actual), "/", group_name, "/best_model_shannon_", variable_interes, ".txt"))
+  capture.output(best_obs, file = paste0("results/alpha/", as.character(fecha_actual), "/", group_name, "/best_model_observed_", variable_interes, ".txt"))
+  capture.output(best_simp, file = paste0("results/alpha/", as.character(fecha_actual), "/", group_name, "/best_model_simpson_", variable_interes, ".txt"))
+}
+
+# Iterar sobre cada grupo
+target_vars <- c("study_group", "severe")
+for (group in names(groups)) {
+  for (var in target_vars) {
+    generar_grafico_por_grupo(group, groups[[group]], var)
+  }
+}
+
+
+```
+
+
+# Phyloseq Beta Aitchison
+
+```{r}
+#load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+
+#extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$sg <- met_phy$study_group
+met_phy$study_id
+#remover las filas de NA solo de antibiotics_during_pregnancy
+met_phy <- met_phy %>%
+  filter(!is.na(antibiotics_during_pregnancy))
+dim(met_phy)
+
+# set study_id como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id
+
+phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Asegúrate de que la tabla OTU contiene solo valores positivos
+OTU_table <- transform_sample_counts(phy, function(x) x + 1) # Añadir pseudo-count
+
+# Extraer la matriz OTU del objeto phyloseq
+OTU_matrix <- otu_table(OTU_table)
+
+# Realizar la transformación clr (centered log-ratio)
+clr_transformed <- clr(as.matrix(OTU_matrix))
+
+
+# Crear un nuevo objeto phyloseq con la transformación clr
+phy_clr <- phyloseq(otu_table(clr_transformed, taxa_are_rows=TRUE),
+                    tax_table(phy), 
+                    sample_data(met_phy))
+
+# Calcular la distancia Aitchison utilizando la distancia euclidiana
+aitch_dist <- phyloseq::distance(phy_clr, method = "euclidean")
+
+form_mod3=formula(paste0("aitch_dist~sg+ bmi+
+                          antibiotics_during_pregnancy + ethnicity"))
+
+set.seed(711)
+mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+
+print(mod_adonis3)
+
+# Obtener la fecha de hoy en formato YYYYMMDD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta/
+#dir.create(file.path("results/beta", fecha_hoy), showWarnings = FALSE, recursive = TRUE)
+dir.create(file.path("results/beta_phylo", fecha_hoy), showWarnings = FALSE, recursive = TRUE) 
+
+# Definir la ruta completa del archivo CSV con la fecha incluida para guardar el modelo
+#output_csv <- file.path("results/beta", fecha_hoy, paste0("adonis_IBD_Meds.csv"))
+#output_csv <- file.path("WGS/results/beta_phylo", fecha_hoy, paste0("ait.csv"))
+output_csv <- file.path("results/beta_phylo", fecha_hoy, paste0("ait_filter_ab0.01%_prev2samples.csv"))
+# Convertir el resultado del modelo a data.frame y guardarlo como CSV
+write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+# Mostrar el resultado del modelo
+print(mod_adonis3)
+pval_consensus=mod_adonis3$`Pr(>F)`[1]
+
+# Realizar PCoA (MDS) con las distancias Aitchison
+set.seed(711)
+mds_result <- cmdscale(aitch_dist, eig = TRUE, k = 2)  # `k` es el número de dimensiones
+
+# Convertir los resultados de MDS a un dataframe
+mds_df <- as.data.frame(mds_result$points)
+colnames(mds_df) <- c("MDS1", "MDS2")
+# Agregar IDs de las muestras al dataframe
+mds_df$study_id <- rownames(mds_df)
+
+# Combinar las coordenadas MDS con los metadatos
+merged_data_mds <- merge(met_phy, mds_df, by = "study_id")
+
+# Calcular p-value y R2 del modelo Adonis
+pval <- round(mod_adonis3$`Pr(>F)`[1], 3)
+r2 <- round(mod_adonis3$R2[1] * 100, 1)
+
+# Crear el gráfico
+p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = sg)) +
+  geom_point(size = 5, alpha = 1) +
+  stat_ellipse(type = "norm", level = 0.95) +  # Agregar elipses de confianza
+  geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1), 
+    axis.text = element_text(size = 12),
+    legend.text = element_text(size = 12),
+    strip.text.x = element_text(size = 12)
+  ) +
+  scale_color_manual(values = c("#ff6347", "#5a9bd4")) +  # Colores personalizados
+  ggtitle("PCoA-Aitchison distances for stool samples")
+
+# Agregar p-value y R2 al gráfico
+p <- p + annotate(
+  "text",
+  x = Inf, y = Inf,
+  label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+  hjust = 1.1, vjust = 1.1,
+  size = 3.5, color = "red"
+)
+
+# Ajustar tamaño del gráfico
+options(repr.plot.width = 6, repr.plot.height = 6, repr.plot.res = 200)
+
+# Imprimir el gráfico
+print(p)
+
+```
+
+# Aitchison Hispanics and whites
+se corre una vez y se genera todo lo necesario para cada una de las ethnias
+```{r}
+# Cargar objeto phyloseq
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# Definir los grupos
+ethnic_groups <- list(
+  "Hispanic_Latina" = subset_samples(phy, ethnicity == "Hispanic/Latina"),
+  "White_Not_Hispanic" = subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+)
+
+# Definir las variables principales para el análisis
+main_vars <- c("study_group", "severe")
+
+# Iterar sobre cada grupo y cada variable principal
+for (group in names(ethnic_groups)) {
+  phy_group <- ethnic_groups[[group]]
+
+  for (main_var in main_vars) {
+    # Extraer metadatos
+    met_phy <- data.frame(sample_data(phy_group))
+    met_phy$sg <- met_phy$study_group
+
+    # Filtrar NAs en antibiotics_during_pregnancy y en la variable principal si es "severe"
+    met_phy <- met_phy %>% filter(!is.na(antibiotics_during_pregnancy))
+    if (main_var == "severe") {
+      met_phy <- met_phy %>% filter(!is.na(severe))
+    }
+
+    # Verificar si la variable tiene al menos dos niveles
+    if (length(unique(met_phy[[main_var]])) < 2) {
+      message(paste("Saltando análisis para", group, "con la variable", main_var, ": menos de dos niveles."))
+      next
+    }
+
+    # Alinear muestras
+    rownames(met_phy) <- met_phy$study_id
+    phy_group <- prune_samples(sample_names(phy_group) %in% rownames(met_phy), phy_group)
+
+    # Asegurar que la tabla OTU contiene solo valores positivos
+    OTU_table <- transform_sample_counts(phy_group, function(x) x + 1)
+
+    # Transformación CLR
+    clr_transformed <- clr(as.matrix(otu_table(OTU_table)))
+
+    # Nuevo objeto phyloseq con la transformación CLR
+    phy_clr <- phyloseq(otu_table(clr_transformed, taxa_are_rows = TRUE),
+                        tax_table(phy_group), 
+                        sample_data(met_phy))
+
+    # Distancia Aitchison
+    aitch_dist <- phyloseq::distance(phy_clr, method = "euclidean")
+
+    # Modelo Adonis
+    form_mod3 <- formula(paste0("aitch_dist ~ ", main_var, " + bmi + antibiotics_during_pregnancy "))
+    set.seed(711)
+    mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+
+    # Guardar resultados
+    fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+    output_dir <- file.path("results/beta_phylo", fecha_hoy, group, main_var)
+    dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+    output_csv <- file.path(output_dir, paste0("adonis_aitchison", main_var, ".csv"))
+    write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+    # PCoA (MDS)
+    set.seed(711)
+    mds_result <- cmdscale(aitch_dist, eig = TRUE, k = 2)
+    mds_df <- as.data.frame(mds_result$points)
+    colnames(mds_df) <- c("MDS1", "MDS2")
+    mds_df$study_id <- rownames(mds_df)
+
+    merged_data_mds <- merge(met_phy, mds_df, by = "study_id")
+
+    pval <- round(mod_adonis3$`Pr(>F)`[1], 3)
+    r2 <- round(mod_adonis3$R2[1] * 100, 1)
+
+    # Gráfico
+    p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = get(main_var))) +
+      geom_point(size = 5, alpha = 1) +
+      stat_ellipse(type = "norm", level = 0.95) +
+      geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+            axis.text = element_text(size = 12),
+            legend.text = element_text(size = 12),
+            strip.text.x = element_text(size = 12)) +
+      scale_color_manual(values = c("#ff6347", "#5a9bd4")) +
+      ggtitle(paste("PCoA-Aitchison distances for", group, "samples (", main_var, ")")) +
+      annotate("text", x = Inf, y = Inf,
+               label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+               hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+    # Guardar gráfico
+    ggsave(filename = file.path(output_dir, paste0("PCoA_plot_aitchison", group, "_", main_var, ".pdf")), plot = p, width = 6, height = 6, dpi = 300)
+
+    # Imprimir resultados
+    print(mod_adonis3)
+  }
+}
+
+
+```
+
+
+# Phyloseq Beta Bray
+the result with this filter (ab0.01%_prev2samples) or wo is almost exactly the same
+```{r}
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# Extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$sg <- met_phy$study_group
+met_phy$study_id
+
+# Remover las filas de NA solo de antibiotics_during_pregnancy
+met_phy <- met_phy %>%
+  filter(!is.na(antibiotics_during_pregnancy))
+dim(met_phy)
+
+# Set study_id como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id
+
+# Prune phyloseq object to include only samples present in metadata
+phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Calcular la distancia Bray-Curtis directamente desde el objeto phyloseq
+bray_dist <- phyloseq::distance(phy, method = "bray")
+
+# Crear la fórmula del modelo
+form_mod3 <- formula(paste0("bray_dist ~ sg + bmi + antibiotics_during_pregnancy + ethnicity"))
+# Ejecutar Adonis con Bray-Curtis
+set.seed(711)
+mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+
+# Mostrar los resultados del modelo
+print(mod_adonis3)
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta/
+dir.create(file.path("results/beta_phylo", fecha_hoy), showWarnings = FALSE, recursive = TRUE) 
+
+# Definir la ruta completa del archivo CSV con la fecha incluida para guardar el modelo
+output_csv <- file.path("results/beta_phylo", fecha_hoy, paste0("bray_filter_ab0.01%_prev2samples.csv"))
+# Convertir el resultado del modelo a data.frame y guardarlo como CSV
+write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+# Mostrar el resultado del modelo
+print(mod_adonis3)
+
+# Extraer el p-valor del primer término
+pval_consensus <- mod_adonis3$`Pr(>F)`[1]
+print(paste("P-value for consensus:", pval_consensus))
+
+```
+
+##BETA dispersions study_group
+funciona pero no guarda el uotput de texto
+```{r}
+
+
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+group= "study_group"
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+bs="stool"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+dist_metrics = c("bray")
+metric_names = c("bray")
+
+# 
+# dist_metrics = c("jaccard")
+# metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( bmi, 
+                   #severe_3cat,
+                   #severe,
+                   study_group, 
+                   antibiotics_during_pregnancy, ethnicity) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("results/beta_phylo", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper_4var.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+
+
+```
+##BETA dispersions severity
+funciona pero no guarda el uotput de texto
+```{r}
+
+
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#o. Primer filtro
+phy= subset_samples(phy, severe_3cat!="control")
+
+
+ group= "severe"
+   palette <- c("No" = "orange", "Yes" = "#CC3300")
+
+bs="stool"
+
+# 2. Elegir metrica de distancia
+#DISTANCE
+# dist_metrics = c("bray")
+# metric_names = c("bray")
+
+# 
+dist_metrics = c("jaccard")
+metric_names = c("jaccard")
+#remove from the phy the samples study_id!=401 para oral
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+# 4. Filtrat metadata
+met <- as(sample_data(phy), "data.frame")
+met1 <- met %>%
+    dplyr::select( bmi, 
+                   #severe_3cat,
+                   severe,
+                   #study_group, 
+                   antibiotics_during_pregnancy, ethnicity) 
+# Crear una carpeta con la fecha actual para guardar los resultados
+today <- format(Sys.Date(), "%Y-%m-%d")
+output_dir <- file.path("results/beta_phylo", today, bs, group)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Comenzar el bucle sobre las métricas de distancia
+for (i in 1:length(dist_metrics)) {
+  
+  # Determinar si se debe usar binary=TRUE o FALSE para este método de distancia
+  binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+  
+  # Calcular la distancia
+  dist <- phyloseq::distance(phy, method = dist_metrics[i], binary = binary_flag)
+  
+  # Realizar el análisis de dispersión beta con la distancia seleccionada
+  # Asegúrate de que los nombres de las muestras en 'met1' y 'dist' coinciden
+  samples_in_both <- intersect(sample_names(phy), rownames(met1))
+  
+  # Subconjuntar 'dist' y 'met1' para incluir solo las muestras comunes
+  dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+  met1_sub <- met1[samples_in_both, ]
+  
+  # Convertir 'group' a factor si no lo es
+  met1_sub[[group]] <- factor(met1_sub[[group]])
+  
+  # Verificar que 'group' tenga al menos dos niveles
+  if (nlevels(met1_sub[[group]]) < 2) {
+    warning(paste("La variable", group, "tiene menos de dos niveles para el método", dist_metrics[i], ". Se omitirá este análisis."))
+    next  # Saltar a la siguiente iteración del bucle
+  }
+  
+  # Realizar el análisis de betadisper
+  betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+  
+  # Extraer distancias de las muestras a sus centroides
+  distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+  
+  # Crear el gráfico de boxplot usando ggplot2
+  p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+    #show dots
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Beta Dispersion for", metric_names[i], bs),
+         x = "Group", y = "Distance to Centroid") +
+    theme(legend.position = "none")
+  
+  # Guardar el gráfico de dispersión beta en un archivo PNG
+  ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper_4var.pdf")), plot = p, width = 3.5, height = 4)
+  
+  # Realizar la prueba de permutación para betadisper
+  set.seed(711)
+  permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+  
+  # Mostrar y guardar los resultados del test de permutación
+  print(permutest_betadisper)
+  write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group ,".txt")), sep = "\t", quote = FALSE)
+  
+}
+
+
+```
+##BETA disphisp or whites Study group
+```{r}
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+group <- "study_group"
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+bs <- "stool"
+# dist_metrics <- c("bray")
+# metric_names <- c("bray")
+dist_metrics <- c("jaccard")
+metric_names <- c("jaccard")
+# Quitar taxones cero
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+# Crear una carpeta con la fecha actual
+today <- format(Sys.Date(), "%Y-%m-%d")
+
+# Definir los subconjuntos de etnicidad
+ethnic_groups <- list(
+  Hispanic = subset_samples(phy, ethnicity == "Hispanic/Latina"),
+  White = subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+)
+
+# Loop para cada grupo étnico
+for (ethnicity_name in names(ethnic_groups)) {
+  
+  cat("Analizando grupo:", ethnicity_name, "\n")
+  
+  phy_eth <- ethnic_groups[[ethnicity_name]]
+  phy_eth <- prune_taxa(taxa_sums(phy_eth) > 0, phy_eth)
+  
+  # Metadata
+  met <- as(sample_data(phy_eth), "data.frame")
+  met1 <- met %>%
+    dplyr::select(bmi, study_group, antibiotics_during_pregnancy) 
+  
+  # Crear carpeta de salida
+  output_dir <- file.path("results/beta_phylo", today, bs, group, ethnicity_name)
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  for (i in seq_along(dist_metrics)) {
+    
+    binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+    
+    dist <- phyloseq::distance(phy_eth, method = dist_metrics[i], binary = binary_flag)
+    
+    samples_in_both <- intersect(sample_names(phy_eth), rownames(met1))
+    dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+    met1_sub <- met1[samples_in_both, ]
+    
+    met1_sub[[group]] <- factor(met1_sub[[group]])
+    
+    if (nlevels(met1_sub[[group]]) < 2) {
+      warning(paste("La variable", group, "tiene menos de dos niveles para el grupo", ethnicity_name, "y método", dist_metrics[i]))
+      next
+    }
+    
+    betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+    distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+    
+    p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+      geom_boxplot() +
+      geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+      scale_fill_manual(values = palette) +
+      theme_bw() +
+      labs(title = paste("Beta Dispersion for", metric_names[i], bs, "-", ethnicity_name),
+           x = "Group", y = "Distance to Centroid") +
+      theme(legend.position = "none")
+    
+    ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper_4var.pdf")), plot = p, width = 3.5, height = 4)
+    
+    set.seed(711)
+    permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+    
+    print(permutest_betadisper)
+    write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group, ".txt")), sep = "\t", quote = FALSE)
+  }
+}
+
+```
+##BETA disp or whites severity
+```{r}
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+phy= subset_samples(phy, severe_3cat!="control")
+group= "severe"
+palette <- c("No" = "orange", "Yes" = "#CC3300")
+bs <- "stool"
+dist_metrics <- c("bray")
+metric_names <- c("bray")
+# dist_metrics <- c("jaccard")
+# metric_names <- c("jaccard")
+# Quitar taxones cero
+phy <- prune_taxa(taxa_sums(phy) > 0, phy)
+
+# Crear una carpeta con la fecha actual
+today <- format(Sys.Date(), "%Y-%m-%d")
+
+# Definir los subconjuntos de etnicidad
+ethnic_groups <- list(
+  Hispanic = subset_samples(phy, ethnicity == "Hispanic/Latina"),
+  White = subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+)
+
+# Loop para cada grupo étnico
+for (ethnicity_name in names(ethnic_groups)) {
+  
+  cat("Analizando grupo:", ethnicity_name, "\n")
+  
+  phy_eth <- ethnic_groups[[ethnicity_name]]
+  phy_eth <- prune_taxa(taxa_sums(phy_eth) > 0, phy_eth)
+  
+  # Metadata
+  met <- as(sample_data(phy_eth), "data.frame")
+  met1 <- met %>%
+    dplyr::select(bmi, severe, antibiotics_during_pregnancy, ethnicity) 
+  
+  # Crear carpeta de salida
+  output_dir <- file.path("results/beta_phylo", today, bs, group, ethnicity_name)
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  for (i in seq_along(dist_metrics)) {
+    
+    binary_flag <- ifelse(dist_metrics[i] == "jaccard", TRUE, FALSE)
+    
+    dist <- phyloseq::distance(phy_eth, method = dist_metrics[i], binary = binary_flag)
+    
+    samples_in_both <- intersect(sample_names(phy_eth), rownames(met1))
+    dist_sub <- as.dist(as.matrix(dist)[samples_in_both, samples_in_both])
+    met1_sub <- met1[samples_in_both, ]
+    
+    met1_sub[[group]] <- factor(met1_sub[[group]])
+    
+    if (nlevels(met1_sub[[group]]) < 2) {
+      warning(paste("La variable", group, "tiene menos de dos niveles para el grupo", ethnicity_name, "y método", dist_metrics[i]))
+      next
+    }
+    
+    betadisper_model <- betadisper(dist_sub, met1_sub[[group]])
+    distances_df <- data.frame(Group = met1_sub[[group]], Distances = betadisper_model$distances)
+    
+    p <- ggplot(distances_df, aes(x = Group, y = Distances, fill = Group)) +
+      geom_boxplot() +
+      geom_jitter(width = 0.2, height = 0, alpha = 0.5) +
+      scale_fill_manual(values = palette) +
+      theme_bw() +
+      labs(title = paste("Beta Dispersion for", metric_names[i], bs, "-", ethnicity_name),
+           x = "Group", y = "Distance to Centroid") +
+      theme(legend.position = "none")
+    
+    ggsave(file.path(output_dir, paste0(dist_metrics[i], "_betadisper_4var.pdf")), plot = p, width = 3.5, height = 4)
+    
+    set.seed(711)
+    permutest_betadisper <- permutest(betadisper_model, permutations = 999)
+    
+    print(permutest_betadisper)
+    write.table(permutest_betadisper$tab, file = file.path(output_dir, paste0(dist_metrics[i], "_betadisper_permutest_", group, ".txt")), sep = "\t", quote = FALSE)
+  }
+}
+
+```
+
+# Phyloseq Beta Jaccard
+```{r}
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# Extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$sg <- met_phy$study_group
+met_phy$study_id
+
+# Remover las filas de NA solo de antibiotics_during_pregnancy
+met_phy <- met_phy %>%
+  filter(!is.na(antibiotics_during_pregnancy))
+dim(met_phy)
+
+# Set study_id como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id
+
+# Prune phyloseq object to include only samples present in metadata
+phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Calcular la distancia Jaccard directamente desde el objeto phyloseq
+jaccard_dist <- phyloseq::distance(phy, method = "jaccard")
+
+# Crear la fórmula del modelo
+form_mod3 <- formula(paste0("jaccard_dist ~ sg + bmi + antibiotics_during_pregnancy + ethnicity"))
+
+# Ejecutar Adonis con Jaccard
+set.seed(711)
+mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+
+# Mostrar los resultados del modelo
+print(mod_adonis3)
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta/
+dir.create(file.path("results/beta_phylo", fecha_hoy), showWarnings = FALSE, recursive = TRUE) 
+
+# Definir la ruta completa del archivo CSV con la fecha incluida para guardar el modelo
+output_csv <- file.path("results/beta_phylo", fecha_hoy, paste0("jacc_filter_ab0.01%_prev2samples.csv"))
+# Convertir el resultado del modelo a data.frame y guardarlo como CSV
+write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+# Mostrar el resultado del modelo
+print(mod_adonis3)
+
+# Extraer el p-valor del primer término
+pval_consensus <- mod_adonis3$`Pr(>F)`[1]
+print(paste("P-value for consensus:", pval_consensus))
+
+
+
+```
+# Bray Severity
+
+```{r}
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+phy= subset_samples(phy, severe_3cat!= "control")
+
+# Extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+table(met_phy$severe)
+met_phy$sg <- met_phy$study_group
+met_phy$study_id
+
+# Remover las filas de NA solo de antibiotics_during_pregnancy
+met_phy <- met_phy %>%
+  filter(!is.na(antibiotics_during_pregnancy))
+dim(met_phy)
+
+# Set study_id como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id
+
+# Prune phyloseq object to include only samples present in metadata
+phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Calcular la distancia Bray-Curtis directamente desde el objeto phyloseq
+bray_dist <- phyloseq::distance(phy, method = "bray")
+
+# Crear la fórmula del modelo
+form_mod3 <- formula(paste0("bray_dist ~ severe + bmi + antibiotics_during_pregnancy + ethnicity"))
+# Ejecutar Adonis con Bray-Curtis
+set.seed(711)
+mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+
+# Mostrar los resultados del modelo
+print(mod_adonis3)
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta/
+dir.create(file.path("results/beta_phylo", fecha_hoy), showWarnings = FALSE, recursive = TRUE) 
+
+# Definir la ruta completa del archivo CSV con la fecha incluida para guardar el modelo
+output_csv <- file.path("results/beta_phylo", fecha_hoy, paste0("severe_bray_filter_ab0.01%_prev2samples.csv"))
+# Convertir el resultado del modelo a data.frame y guardarlo como CSV
+write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+# Mostrar el resultado del modelo
+print(mod_adonis3)
+
+# Extraer el p-valor del primer término
+pval_consensus <- mod_adonis3$`Pr(>F)`[1]
+print(paste("P-value for consensus:", pval_consensus))
+
+```
+# Jaccard Severity
+
+```{r}
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+phy= subset_samples(phy, severe_3cat!= "control")
+
+# Extract metadata from phyloseq object
+met_phy <- data.frame(sample_data(phy))
+met_phy$sg <- met_phy$study_group
+met_phy$study_id
+
+# Remover las filas de NA solo de antibiotics_during_pregnancy
+met_phy <- met_phy %>%
+  filter(!is.na(antibiotics_during_pregnancy))
+dim(met_phy)
+
+# Set study_id como rownames(met_phy)
+rownames(met_phy) <- met_phy$study_id
+
+# Prune phyloseq object to include only samples present in metadata
+phy <- prune_samples(sample_names(phy) %in% rownames(met_phy), phy)
+
+# Calcular la distancia Bray-Curtis directamente desde el objeto phyloseq
+bray_dist <- phyloseq::distance(phy, method = "jaccard")
+
+# Crear la fórmula del modelo
+form_mod3 <- formula(paste0("bray_dist ~ severe + bmi + antibiotics_during_pregnancy + ethnicity"))
+# Ejecutar Adonis con Bray-Curtis
+set.seed(711)
+mod_adonis3 <- vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+
+# Mostrar los resultados del modelo
+print(mod_adonis3)
+
+# Obtener la fecha de hoy en formato YYYY-MM-DD
+fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+
+# Crear una carpeta con la fecha de hoy dentro de results/beta/
+dir.create(file.path("results/beta_phylo", fecha_hoy), showWarnings = FALSE, recursive = TRUE) 
+
+# Definir la ruta completa del archivo CSV con la fecha incluida para guardar el modelo
+output_csv <- file.path("results/beta_phylo", fecha_hoy, paste0("severe_jacc_filter_ab0.01%_prev2samples.csv"))
+# Convertir el resultado del modelo a data.frame y guardarlo como CSV
+write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+# Mostrar el resultado del modelo
+print(mod_adonis3)
+
+# Extraer el p-valor del primer término
+pval_consensus <- mod_adonis3$`Pr(>F)`[1]
+print(paste("P-value for consensus:", pval_consensus))
+
+```
+
+
+#bray y jacar for HISPANIS or WHITES
+
+```{r}
+# Cargar librerías necesarias
+library(phyloseq)
+library(vegan)
+library(dplyr)
+library(ggplot2)
+
+# Cargar objeto phyloseq
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# Definir los grupos
+ethnic_groups <- list(
+  "Hispanic_Latina" = subset_samples(phy, ethnicity == "Hispanic/Latina"),
+  "White_Not_Hispanic" = subset_samples(phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+)
+
+# Definir las variables principales para el análisis
+main_vars <- c("study_group", "severe")
+
+# Definir las métricas de distancia
+distance_methods <- c("bray", "jaccard")
+
+# Iterar sobre cada grupo, variable y método de distancia
+for (group in names(ethnic_groups)) {
+  phy_group <- ethnic_groups[[group]]
+
+  for (main_var in main_vars) {
+    # Extraer metadatos
+    met_phy <- data.frame(sample_data(phy_group))
+    met_phy$sg <- met_phy$study_group
+
+    # Añadir columna study_id si no existe (Paso 3)
+    if (!"study_id" %in% colnames(met_phy)) {
+      met_phy$study_id <- rownames(met_phy)
+    }
+
+    # Filtrar NAs en antibiotics_during_pregnancy y la variable principal si es "severe"
+    met_phy <- met_phy %>% filter(!is.na(antibiotics_during_pregnancy))
+    if (main_var == "severe") {
+      met_phy <- met_phy %>% filter(!is.na(severe))
+    }
+
+    # Verificar que la variable tenga al menos dos niveles
+    if (length(unique(met_phy[[main_var]])) < 2) {
+      message(paste("Saltando análisis para", group, "con la variable", main_var, ": menos de dos niveles."))
+      next
+    }
+
+    # Alinear muestras (Paso 1)
+    rownames(met_phy) <- met_phy$study_id
+    phy_group <- prune_samples(sample_names(phy_group) %in% rownames(met_phy), phy_group)
+    met_phy <- met_phy[sample_names(phy_group), , drop = FALSE]
+
+    # Asegurar que la tabla OTU contiene solo valores positivos
+    OTU_table <- transform_sample_counts(phy_group, function(x) x + 1)
+
+    for (method in distance_methods) {
+      # Calcular distancia
+      dist_matrix <- phyloseq::distance(OTU_table, method = method)
+
+      # Crear fórmula y correr modelo adonis2 con manejo de error (Paso 2)
+      form_mod3 <- formula(paste0("dist_matrix ~ ", main_var, " + bmi + antibiotics_during_pregnancy "))
+      set.seed(711)
+      mod_adonis3 <- tryCatch({
+        vegan::adonis2(form_mod3, data = met_phy, permutations = 999, by = "margin")
+      }, error = function(e) {
+        message(paste("Error en adonis2 para", group, main_var, method, ":", e$message))
+        return(NULL)
+      })
+
+      # Saltar si hubo error
+      if (is.null(mod_adonis3)) next
+
+      # Guardar resultados
+      fecha_hoy <- format(Sys.Date(), "%Y-%m-%d")
+      output_dir <- file.path("results/beta_phylo", fecha_hoy, group, main_var, method)
+      dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+      output_csv <- file.path(output_dir, paste0("adonis_results_", main_var, "_", method, ".csv"))
+      write.csv(as.data.frame(mod_adonis3), file = output_csv, row.names = TRUE)
+
+      # PCoA (MDS)
+      set.seed(711)
+      mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)
+      mds_df <- as.data.frame(mds_result$points)
+      colnames(mds_df) <- c("MDS1", "MDS2")
+      mds_df$study_id <- rownames(mds_df)
+
+      merged_data_mds <- merge(met_phy, mds_df, by = "study_id")
+
+      pval <- round(mod_adonis3$`Pr(>F)`[1], 3)
+      r2 <- round(mod_adonis3$R2[1] * 100, 1)
+
+      # Gráfico
+      p <- ggplot(merged_data_mds, aes(x = MDS1, y = MDS2, color = get(main_var))) +
+        geom_point(size = 5, alpha = 1) +
+        stat_ellipse(type = "norm", level = 0.95) +
+        geom_point(color = "black", size = 5, shape = 1, stroke = 0.25) +
+        theme_bw() +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1),
+              axis.text = element_text(size = 12),
+              legend.text = element_text(size = 12),
+              strip.text.x = element_text(size = 12)) +
+        scale_color_manual(values = c("#ff6347", "#5a9bd4")) +
+        ggtitle(paste("PCoA-", method, " distances for", group, "samples (", main_var, ")")) +
+        annotate("text", x = Inf, y = Inf,
+                 label = paste("p-value =", pval, "\nR2 =", r2, "%"),
+                 hjust = 1.1, vjust = 1.1, size = 3.5, color = "red")
+
+      # Guardar gráfico
+      ggsave(filename = file.path(output_dir, paste0("PCoA_plot_", group, "_", main_var, "_", method, ".pdf")),
+             plot = p, width = 6, height = 6, dpi = 300)
+
+      # Imprimir resultados
+      print(mod_adonis3)
+    }
+  }
+}
+
+
+```
+
+
+
+# Maaslin
+
+```{r}
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+library(Maaslin2)
+library(phyloseq)
+
+# Filtering by prevalence
+perc_samples <-  0.15
+phy_fil = phyloseq::filter_taxa(phy, function(x) sum(x > 0) > (perc_samples*length(x)), TRUE)
+phy_fil <- prune_taxa(taxa_sums(phy_fil)> 0, phy_fil)
+
+# Filtering by abundant taxa
+otu_sums <- rowSums(otu_table(phy_fil))
+otus_to_keep <- otu_sums > 20
+phy_fil_filtered <- prune_taxa(otus_to_keep, phy_fil)
+
+#extracting metadata and transforming to data frame
+met_phy <- as(sample_data(phy_fil_filtered), "data.frame")
+
+#met1$redcap_study_interaction <- interaction(met1$redcap_event_code, met1$study_group)
+#met1$delivery_study_group_interaction <- interaction(met1$delivery_type, met1$study_group)
+#met1$redcap_event_code=as.factor(met1$redcap_event_code)
+#met1$study_group
+OTU=otu_table(phy_fil_filtered)
+dim(OTU)
+
+met_phy$study_group
+#Running Maaslin2
+set.seed(123)
+
+fit_data2 = Maaslin2(input_metadata = met_phy,
+                     input_data = OTU,
+                     output = "results/maaslin/sg_ab20_prev15_sigp005",
+                     normalization = 'NONE', #not necessary because it is already as relative abundance
+                     transform="LOG",
+                     max_significance= 0.610825536,
+                     min_prevalence = 0, #because I have already performed the filtering
+                    fixed_effects = c("study_group", "bmi", "antibiotics_during_pregnancy" , "ethnicity"),
+                   reference= c("study_group,Control"))
+
+#?Maaslin2
+
+
+
+
+```
+#Maaslin sp or class
+```{r}
+# Load required libraries
+library(Maaslin2)
+library(phyloseq)
+library(lubridate)
+
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# Define levels to analyze
+tax_levels <- c("Phylum", "Order", "Class", "Family", "Genus", "Species")
+
+# Create output directory with today's date
+output_dir <- paste0("WGS/results/maaslin/", Sys.Date())
+dir.create(output_dir, recursive = TRUE)
+
+# Function to extract, collapse, and filter OTU table by taxonomic level
+process_taxonomic_level <- function(phy, level, perc_samples) {
+  cat("\nProcessing taxonomic level:", level, "\n")
+  
+  # Collapse OTUs to the desired taxonomic level
+  phy_collapsed <- tax_glom(phy, taxrank = level)
+  
+  # Ensure unique taxa names
+  tax_names <- make.unique(tax_table(phy_collapsed)[, level])
+  taxa_names(phy_collapsed) <- ifelse(is.na(tax_names) | tax_names == "", "Unclassified", tax_names)
+  
+  # Transform counts to relative abundances
+  phy_rel <- transform_sample_counts(phy_collapsed, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence
+  phy_filtered <- phyloseq::filter_taxa(phy_rel, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_filtered <- prune_taxa(taxa_sums(phy_filtered) > 0, phy_filtered)
+  
+  # Print unique taxon names for validation
+  unique_taxa <- unique(taxa_names(phy_filtered))
+  cat("Number of unique taxa at level", level, ":", length(unique_taxa), "\n")
+  
+  return(phy_filtered)
+}
+
+# Run Maaslin2 for each taxonomic level
+for (level in tax_levels) {
+  # Process taxonomic level
+  phy_level <- process_taxonomic_level(phy, level, perc_samples = 0.15)
+  
+  # Extract OTU table and metadata
+  otu_table <- as.data.frame(otu_table(phy_level))
+  sample_metadata <- as(sample_data(phy_level), "data.frame")
+  
+  # Transpose OTU table for Maaslin2
+  otu_table <- t(otu_table)
+  
+  # Define output directory for the taxonomic level
+  level_output_dir <- file.path(output_dir, paste0("maaslin_", level))
+  dir.create(level_output_dir, showWarnings = FALSE)
+  
+  # Define fixed effects
+  fixed_effects <- c( "bmi", "study_group", "antibiotics_during_pregnancy", "ethnicity")
+  
+set.seed(123)
+  Maaslin2(
+    input_data = otu_table,
+    input_metadata = sample_metadata,
+    output = level_output_dir,
+    fixed_effects = fixed_effects,
+    transform = "LOG",
+    analysis_method = "LM",
+    normalization = "NONE", # Already transformed to relative abundances
+    max_significance = 0.05,
+    correction = "BH",
+    standardize = TRUE,
+    min_abundance = 5,
+    min_prevalence = 0
+  )
+}
+
+```
+# Maaslin all levels
+
+```{r}
+library(phyloseq)
+library(reshape2)
+library(dplyr)
+library(Maaslin2)
+library(ggplot2)
+
+# Set working directory
+# Load phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+bs = "all"
+# phy <- subset_samples(phy,   ethnicity == "Hispanic/Latina")
+#phy <- subset_samples( phy, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+phy= subset_samples(phy, severe_3cat!="control")
+
+
+# Define taxonomic levels to analyze
+tax_levels <- c("Species", "Genus", "Family", "Class", "Order", "Phylum")
+
+# Date for output folder
+today <- Sys.Date()
+
+# Process ASV level (no taxonomic agglomeration)
+cat("Processing ASV\n")
+phy_level <- phy
+phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+perc_samples <- 0.20
+phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+abundance_threshold <- 15
+phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+taxa_names(phy_fil) <- make.unique(taxa_names(phy_fil))
+
+# Extract OTU table, metadata, and taxonomy
+otu_table <- as.data.frame(t(otu_table(phy_fil)))
+sample_metadata <- as(sample_data(phy_fil), "data.frame")
+
+# Define output directory
+output_dir <- paste0("results/maaslin/", today, "/", bs, "/ASV_study_group_20prev_sig0_25_ab15per")
+dir.create(output_dir, recursive = TRUE)
+
+# Run MaAsLin2
+fit_data <- Maaslin2(
+  input_data = otu_table, 
+  input_metadata = sample_metadata, 
+  output = output_dir,
+  #fixed_effects = c("study_group", "bmi", "antibiotics_during_pregnancy", "ethnicity"),
+        #  fixed_effects = c("study_group","bmi", "antibiotics_during_pregnancy"),
+         
+
+         # fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy","ethnicity"),
+   fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy"),
+#    fixed_effects = c("study_group"),
+  random_effects = NULL,
+  normalization = "TSS",
+  max_significance = 0.25,
+  transform = "LOG", 
+  analysis_method = "LM", 
+  correction = "BH", 
+  standardize = TRUE,
+  min_abundance = 0,
+  min_prevalence = 0
+)
+
+for (tax_level in tax_levels) {
+  cat("Processing", tax_level, "\n")
+  
+  # Aggregate data if necessary
+  phy_level <- tax_glom(phy, taxrank = tax_level)
+  
+  # Transform to relative abundance
+  phy_prop <- transform_sample_counts(phy_level, function(x) x / sum(x) * 100)
+  
+  # Filter by prevalence and abundance
+  phy_fil <- phyloseq::filter_taxa(phy_prop, function(x) sum(x > 0) > (perc_samples * length(x)), TRUE)
+  phy_fil <- prune_taxa(taxa_sums(phy_fil) > abundance_threshold, phy_fil)
+  
+  # Ensure unique taxa names
+  taxa_names(phy_fil) <- make.unique(tax_table(phy_fil)[, tax_level])
+  
+  # Extract OTU table, metadata, and taxonomy
+  otu_table <- as.data.frame(t(otu_table(phy_fil)))
+  sample_metadata <- as(sample_data(phy_fil), "data.frame")
+  
+  # Define output directory
+  output_dir <- paste0("results/maaslin/", today, "/", bs, "/", tax_level, "_study_group_20prev_sig0_25_ab15per")
+  dir.create(output_dir, recursive = TRUE)
+  
+  # Run MaAsLin2
+  fit_data <- Maaslin2(
+    input_data = otu_table, 
+    input_metadata = sample_metadata, 
+    output = output_dir,
+   # fixed_effects = c("study_group","bmi", "antibiotics_during_pregnancy", "ethnicity"),
+      #  fixed_effects = c("study_group","bmi", "antibiotics_during_pregnancy"),
+           # fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy","ethnicity"),
+
+ fixed_effects = c("severe","bmi", "antibiotics_during_pregnancy"),
+   #     fixed_effects = c("study_group"),
+
+    random_effects = NULL,
+    normalization = "TSS",
+    max_significance = 0.25,
+    transform = "LOG", 
+    analysis_method = "LM", 
+    correction = "BH", 
+    standardize = TRUE,
+    min_abundance = 0,
+    min_prevalence = 0
+  )
+  
+  # Load results
+  results_file <- paste0(output_dir, "/all_results.tsv")
+  if (file.exists(results_file)) {
+    maaslin_results <- read.table(results_file, header = TRUE, sep = "\t")
+    
+    # Filter significant results
+#    significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+        significant_results <- subset(maaslin_results, pval < 0.05 & metadata == 'study_group' & value == 'PE')
+
+    significant_results <- significant_results[order(significant_results$coef, decreasing = TRUE), ]
+    significant_results$feature <- factor(significant_results$feature, levels = significant_results$feature)
+    
+    # Create coefficient plot
+    p <- ggplot(significant_results, aes(x = feature, y = coef)) +
+      geom_point() +
+      geom_errorbar(aes(ymin = coef - stderr, ymax = coef + stderr), width = 0.2, color = "red") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+      labs(title = paste("Significant Coeff (", tax_level, " Study Group: PE, pval < 0.25)", sep = ""),
+           x = "Feature", y = "Coefficient") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    
+    # Save plot
+    output_plot <- paste0(output_dir, "/coef_plot_PE_study_group_significant_ordered.pdf")
+    ggsave(output_plot, plot = p, width = 6, height = 4)
+  }
+}
+
+cat("Analysis completed!\n")
+```
+# Relative abundance Genus: CLostrida
+Hispanics
+```{r}
+
+# Load phyloseq object
+physeq_subset <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+physeq_subset <- tax_glom(physeq_subset, taxrank = 'Class')
+
+ physeq_subset <- subset_samples(physeq_subset,   ethnicity == "Hispanic/Latina")
+#physeq_subset <- subset_samples( physeq_subset, race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+ #extrat txa_table
+target_species <- c('Clostridia')
+
+# 1. Subset samples: body_site == "MomTongue"
+
+# 2. Transform counts to relative abundances por muestra
+tax_rel_abund <- transform_sample_counts(physeq_subset, function(x) x / sum(x))
+
+# 3. Crear data frame para plotear
+melted_df <- psmelt(tax_rel_abund)
+
+# 4. Filtrar por los géneros de interés
+melted_df_target <- melted_df[melted_df$Class %in% target_species, ]
+
+# 5. Asegurar que severe tenga los niveles adecuados
+melted_df_target$study_group <- factor(melted_df_target$study_group, levels = c('Control', 'PE'))
+
+# 6. Crear carpeta con fecha actual
+fecha_actual <- Sys.Date()
+output_dir <- paste0("results/rel_abund_boxplots/", fecha_actual, "/gut_sg_hisp/")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# 7. Paleta de colores
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# 8. Obtener géneros únicos
+especies <- unique(melted_df_target$Class)
+
+# 9. Loop para plotear cada especie
+for (esp in especies) {
+  df_plot <- filter(melted_df_target, Class == esp)
+
+  # Tamaños de muestra por grupo
+  counts <- df_plot %>%
+    group_by(study_group) %>%
+    summarise(n = n(), .groups = "drop")
+
+  labels_x <- setNames(
+    paste0(counts$study_group, "\n(n=", counts$n, ")"),
+    counts$study_group
+  )
+
+  # Plot
+  p1 <- ggplot(df_plot, aes(x = study_group, y = Abundance, fill = study_group)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.2, size = 1.5, alpha = 0.7) +
+    scale_fill_manual(values = palette) +
+    scale_x_discrete(labels = labels_x) +
+    labs(
+      x = 'Study Group',
+      y = 'Relative Abundance',
+      title = paste('Genus:', esp)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = 'none',
+      strip.text = element_text(size = 10),
+      axis.text.x = element_text(size = 10)
+    )
+
+  # Guardar gráfico
+  ggsave(
+    filename = paste0(output_dir, "/", gsub("[/: ]", "_", esp), ".pdf"),
+    plot = p1,
+    width = 2,
+    height = 3.5
+  )
+}
+
+# Mostrar último plot
+print(p1)
+
+
+```
+#prevalence core taxa<40% by study group
+
+Prevotella aparece en del 100% de las muestras, por eos no sale en la tabla de prevalencias
+```{r}
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+# --- 1. Agregar nombres de grupo ---
+group1 <- "Control"
+group2 <- "PE"
+
+#extrat metadata
+met_phy <- as(sample_data(phy), "data.frame")
+table(met_phy$race, met_phy$ethnicity)
+dim(met_phy)
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Filtrar por prevalencia ≥ 40% ---
+prev_filter <- genefilter_sample(
+  phy_genus,
+  filterfun_sample(function(x) x > 0),
+  A = 0.40 * nsamples(phy_genus)
+)
+taxa_to_keep <- taxa_names(phy_genus)[prev_filter]
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+# --- 3. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c("Control", "PE"))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 4. Comparar prevalencia ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  # Asegurar alineación correcta por nombres
+  presence <- otu[taxon, ]
+  presence <- presence > 0
+
+  group <- meta$study_group
+  names(presence) <- rownames(meta)  # asegura alineación exacta
+
+  # Subset sin NA
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+
+    prev1 <- mean(presence[group == "Control"])
+    prev2 <- mean(presence[group == "PE"])
+    count1 <- sum(presence[group == "Control"])
+    count2 <- sum(presence[group == "PE"])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+
+# Ajuste de p-valor y formato
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+# Agregar columnas
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "core"
+results$Population <- "All"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por p-valor (numérico)
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# Guardar
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "results/prev/prevalence_40_gut_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+#prevalence alternative 20-40% by study group
+```{r}
+# --- 0. Librerías ---
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+# --- 1. Parámetros de grupo ---
+group1 <- "Control"
+group2 <- "PE"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Calcular prevalencia global ---
+otu_full <- otu_table(phy_genus)
+if (!taxa_are_rows(phy_genus)) otu_full <- t(otu_full)
+otu_full <- as(otu_full, "matrix")
+mode(otu_full) <- "numeric"
+
+prevalence_all <- apply(otu_full > 0, 1, mean)
+
+# --- 4. Filtrar taxa accesorias: 20% < prevalencia ≤ 40% ---
+n_samples <- nsamples(phy_genus)
+taxa_to_keep <- names(prevalence_all[
+  (prevalence_all > 0.20) & (prevalence_all <= 0.40)
+])
+
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+cat(paste("Original genera:", ntaxa(phy_genus), "\n"))
+cat(paste("Accessory taxa (20–40%):", ntaxa(phy_filt), "\n"))
+
+# --- 5. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c(group1, group2))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 6. Comparar prevalencia entre grupos ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  presence <- otu[taxon, ] > 0
+  names(presence) <- rownames(meta)
+  
+  group <- meta$study_group
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+  
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+    prev1 <- mean(presence[group == group1])
+    prev2 <- mean(presence[group == group2])
+    
+    count1 <- sum(presence[group == group1])
+    count2 <- sum(presence[group == group2])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# --- 7. Ajuste de p-valor y formato final ---
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "accessory taxa"
+results$Population <- "All"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por P_value
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# --- 8. Guardar resultados ---
+write.csv(results, "results/prev/prevalence_20to40_gut_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+
+#prevalence core taxa<40% by severe
+```{r}
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+#subset remove control from severe_3cat
+phy <- subset_samples(phy, severe_3cat != "control")
+
+# --- 1. Agregar nombres de grupo ---
+group1 <- "Yes"
+group2 <- "No"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Filtrar por prevalencia ≥ 40% ---
+prev_filter <- genefilter_sample(
+  phy_genus,
+  filterfun_sample(function(x) x > 0),
+  A = 0.40 * nsamples(phy_genus)
+)
+taxa_to_keep <- taxa_names(phy_genus)[prev_filter]
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+# --- 3. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$severe <- factor(meta$severe, levels = c("Yes", "No"))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 4. Comparar prevalencia ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  # Asegurar alineación correcta por nombres
+  presence <- otu[taxon, ]
+  presence <- presence > 0
+
+  group <- meta$severe
+  names(presence) <- rownames(meta)  # asegura alineación exacta
+
+  # Subset sin NA
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+
+    prev1 <- mean(presence[group == "Yes"])
+    prev2 <- mean(presence[group == "No"])
+    count1 <- sum(presence[group == "Yes"])
+    count2 <- sum(presence[group == "No"])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+
+# Ajuste de p-valor y formato
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+# Agregar columnas
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "core"
+results$Population <- "PE individuals"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por p-valor (numérico)
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# Guardar
+write.csv(results, "results/prev/prevalence_40_gut_sev.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+
+#prevalence alternative 20-40% by severe
+```{r}
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+#subset remove control from severe_3cat
+phy <- subset_samples(phy, severe_3cat != "control")
+
+
+phy <- PHY_fil_rar_alpha_meco
+
+# --- 1. Parámetros de grupo ---
+group1 <- "No"
+group2 <- "Yes"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Calcular prevalencia global ---
+otu_full <- otu_table(phy_genus)
+if (!taxa_are_rows(phy_genus)) otu_full <- t(otu_full)
+otu_full <- as(otu_full, "matrix")
+mode(otu_full) <- "numeric"
+
+prevalence_all <- apply(otu_full > 0, 1, mean)
+
+# --- 4. Filtrar taxa accesorias: 20% < prevalencia ≤ 40% ---
+n_samples <- nsamples(phy_genus)
+taxa_to_keep <- names(prevalence_all[
+  (prevalence_all > 0.20) & (prevalence_all <= 0.40)
+])
+
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+cat(paste("Original genera:", ntaxa(phy_genus), "\n"))
+cat(paste("Accessory taxa (20–40%):", ntaxa(phy_filt), "\n"))
+
+# --- 5. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$severe <- factor(meta$severe, levels = c(group1, group2))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 6. Comparar prevalencia entre grupos ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  presence <- otu[taxon, ] > 0
+  names(presence) <- rownames(meta)
+  
+  group <- meta$severe
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+  
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+    prev1 <- mean(presence[group == group1])
+    prev2 <- mean(presence[group == group2])
+    
+    count1 <- sum(presence[group == group1])
+    count2 <- sum(presence[group == group2])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      No_count = count1,
+      No_percent = sprintf("%.2f%%", prev1 * 100),
+      Yes_count = count2,
+      Yes_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# --- 7. Ajuste de p-valor y formato final ---
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "accessory taxa"
+results$Population <- "PE individuals"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "No_count", "No_percent",
+                       "Yes_count", "Yes_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por P_value
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# --- 8. Guardar resultados ---
+
+write.csv(results, "results/prev/prevalence_20to40_gut_sev.csv", row.names = FALSE)
+print(results)
+
+```
+# out of curriosity: prevotella prevalence
+```{r}
+#
+# Calculate the prevalence of a specific genus in a phyloseq object
+#
+
+# --- 1. Load libraries and data ---
+physeq_object <-  readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# --- 2. Define the target taxon ---
+target_genus <- "g__Prevotella"
+
+
+# --- 3. Subset phyloseq object to the target genus ---
+prevotella_subset <- subset_taxa(physeq_object, Genus == target_genus)
+
+
+# --- 4. Calculate Prevalence ---
+# Check if the genus exists in the data
+if (ntaxa(prevotella_subset) > 0) {
+  
+  # Get total number of samples
+  total_samples <- nsamples(physeq_object)
+  
+  # Count samples where Prevotella is present (abundance > 0)
+  # sample_sums() calculates the total abundance for each sample in the subset.
+  # A sum > 0 means the genus is present.
+  positive_samples <- sum(sample_sums(prevotella_subset) > 0)
+  
+  # Calculate prevalence as a fraction
+  prevalence_fraction <- positive_samples / total_samples
+  
+  # Calculate prevalence as a percentage
+  prevalence_percentage <- prevalence_fraction * 100
+  
+} else {
+  
+  # If the genus is not found, prevalence is 0
+  prevalence_fraction <- 0
+  prevalence_percentage <- 0
+  
+}
+
+
+# --- 5. Print the results ---
+cat(paste("Genus:", target_genus, "\n"))
+cat(paste("Found in", positive_samples, "out of", total_samples, "samples.\n"))
+cat(paste("Prevalence (fraction):", round(prevalence_fraction, 4), "\n"))
+cat(paste("Prevalence (percentage):", round(prevalence_percentage, 2), "%\n"))
+```
+#prevalance core > 40 white
+
+```{r}
+# --- Inicio del Script ---
+
+physeq_raw <-  readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+phy=subset_samples(physeq_raw,race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina") 
+
+group1 <- "Control"
+group2 <- "PE"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Filtrar por prevalencia ≥ 40% ---
+prev_filter <- genefilter_sample(
+  phy_genus,
+  filterfun_sample(function(x) x > 0),
+  A = 0.40 * nsamples(phy_genus)
+)
+taxa_to_keep <- taxa_names(phy_genus)[prev_filter]
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+# --- 3. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c("Control", "PE"))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 4. Comparar prevalencia ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  # Asegurar alineación correcta por nombres
+  presence <- otu[taxon, ]
+  presence <- presence > 0
+
+  group <- meta$study_group
+  names(presence) <- rownames(meta)  # asegura alineación exacta
+
+  # Subset sin NA
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+
+    prev1 <- mean(presence[group == "Control"])
+    prev2 <- mean(presence[group == "PE"])
+    count1 <- sum(presence[group == "Control"])
+    count2 <- sum(presence[group == "PE"])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+
+# Ajuste de p-valor y formato
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+# Agregar columnas
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "core"
+results$Population <- "White"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por p-valor (numérico)
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# Guardar
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "results/prev/prevalence_white_40_gut_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+#prevalance core > 40 hispanics
+
+```{r}
+# --- Inicio del Script ---
+
+physeq_raw <-  readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+phy=subset_samples(physeq_raw,ethnicity == "Hispanic/Latina") 
+
+group1 <- "Control"
+group2 <- "PE"
+
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Filtrar por prevalencia ≥ 40% ---
+prev_filter <- genefilter_sample(
+  phy_genus,
+  filterfun_sample(function(x) x > 0),
+  A = 0.40 * nsamples(phy_genus)
+)
+taxa_to_keep <- taxa_names(phy_genus)[prev_filter]
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+# --- 3. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c("Control", "PE"))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 4. Comparar prevalencia ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  # Asegurar alineación correcta por nombres
+  presence <- otu[taxon, ]
+  presence <- presence > 0
+
+  group <- meta$study_group
+  names(presence) <- rownames(meta)  # asegura alineación exacta
+
+  # Subset sin NA
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+
+    prev1 <- mean(presence[group == "Control"])
+    prev2 <- mean(presence[group == "PE"])
+    count1 <- sum(presence[group == "Control"])
+    count2 <- sum(presence[group == "PE"])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+
+# Ajuste de p-valor y formato
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+# Agregar columnas
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "core"
+results$Population <- "Hispanic"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por p-valor (numérico)
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# Guardar
+dir.create("res/prev", recursive = TRUE, showWarnings = FALSE)
+write.csv(results, "results/prev/prevalence_hisp_40_gut_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+#prevalence alternative 20-40% by study group white
+```{r}
+# --- 0. Librerías ---
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+physeq_raw <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+# --- 1. Parámetros de grupo ---
+group1 <- "Control"
+group2 <- "PE"
+phy=subset_samples(physeq_raw,race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina") 
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Calcular prevalencia global ---
+otu_full <- otu_table(phy_genus)
+if (!taxa_are_rows(phy_genus)) otu_full <- t(otu_full)
+otu_full <- as(otu_full, "matrix")
+mode(otu_full) <- "numeric"
+
+prevalence_all <- apply(otu_full > 0, 1, mean)
+
+# --- 4. Filtrar taxa accesorias: 20% < prevalencia ≤ 40% ---
+n_samples <- nsamples(phy_genus)
+taxa_to_keep <- names(prevalence_all[
+  (prevalence_all > 0.20) & (prevalence_all <= 0.40)
+])
+
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+cat(paste("Original genera:", ntaxa(phy_genus), "\n"))
+cat(paste("Accessory taxa (20–40%):", ntaxa(phy_filt), "\n"))
+
+# --- 5. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c(group1, group2))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 6. Comparar prevalencia entre grupos ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  presence <- otu[taxon, ] > 0
+  names(presence) <- rownames(meta)
+  
+  group <- meta$study_group
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+  
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+    prev1 <- mean(presence[group == group1])
+    prev2 <- mean(presence[group == group2])
+    
+    count1 <- sum(presence[group == group1])
+    count2 <- sum(presence[group == group2])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# --- 7. Ajuste de p-valor y formato final ---
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "accessory taxa"
+results$Population <- "All"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por P_value
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# --- 8. Guardar resultados ---
+write.csv(results, "results/prev/prevalence_white_20to40_gut_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+#prevalence alternative 20-40% by study group hispanic
+```{r}
+# --- 0. Librerías ---
+library(phyloseq)
+library(dplyr)
+library(genefilter)
+physeq_raw <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+# --- 1. Parámetros de grupo ---
+group1 <- "Control"
+group2 <- "PE"
+phy=subset_samples(physeq_raw, ethnicity == "Hispanic/Latina") 
+# --- 2. Aglomerar a nivel de género ---
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+# --- 3. Calcular prevalencia global ---
+otu_full <- otu_table(phy_genus)
+if (!taxa_are_rows(phy_genus)) otu_full <- t(otu_full)
+otu_full <- as(otu_full, "matrix")
+mode(otu_full) <- "numeric"
+
+prevalence_all <- apply(otu_full > 0, 1, mean)
+
+# --- 4. Filtrar taxa accesorias: 20% < prevalencia ≤ 40% ---
+n_samples <- nsamples(phy_genus)
+taxa_to_keep <- names(prevalence_all[
+  (prevalence_all > 0.20) & (prevalence_all <= 0.40)
+])
+
+phy_filt <- prune_taxa(taxa_to_keep, phy_genus)
+
+cat(paste("Original genera:", ntaxa(phy_genus), "\n"))
+cat(paste("Accessory taxa (20–40%):", ntaxa(phy_filt), "\n"))
+
+# --- 5. Preparar tablas ---
+otu <- otu_table(phy_filt)
+if (!taxa_are_rows(phy_filt)) otu <- t(otu)
+otu <- as(otu, "matrix")
+mode(otu) <- "numeric"
+
+meta <- data.frame(sample_data(phy_filt))
+meta$study_group <- factor(meta$study_group, levels = c(group1, group2))
+
+tax <- as.data.frame(tax_table(phy_filt))
+tax$TaxonID <- rownames(tax)
+
+# --- 6. Comparar prevalencia entre grupos ---
+results <- data.frame()
+
+for (taxon in rownames(otu)) {
+  presence <- otu[taxon, ] > 0
+  names(presence) <- rownames(meta)
+  
+  group <- meta$study_group
+  valid_idx <- !is.na(group)
+  presence <- presence[valid_idx]
+  group <- group[valid_idx]
+  
+  tab <- table(group, presence)
+
+  if (all(dim(tab) == c(2, 2))) {
+    pval <- fisher.test(tab)$p.value
+    prev1 <- mean(presence[group == group1])
+    prev2 <- mean(presence[group == group2])
+    
+    count1 <- sum(presence[group == group1])
+    count2 <- sum(presence[group == group2])
+
+    genus_name <- as.character(tax[taxon, "Genus"])
+    if (is.na(genus_name) || genus_name == "") genus_name <- "g__Unclassified"
+    else if (!grepl("^g__", genus_name)) genus_name <- paste0("g__", genus_name)
+
+    results <- rbind(results, data.frame(
+      Genus = genus_name,
+      Control_count = count1,
+      Control_percent = sprintf("%.2f%%", prev1 * 100),
+      PE_count = count2,
+      PE_percent = sprintf("%.2f%%", prev2 * 100),
+      Difference = sprintf("%.2f%%", (prev2 - prev1) * 100),
+      P_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# --- 7. Ajuste de p-valor y formato final ---
+results$Q_value <- p.adjust(results$P_value, method = "BH")
+results$P_value <- ifelse(results$P_value < 0.05,
+                          paste0(sprintf("%.5f", results$P_value), "*"),
+                          sprintf("%.5f", results$P_value))
+
+results$Body_Site <- "Gut"
+results$Taxa_Type <- "accessory taxa"
+results$Population <- "PE Hispanic"
+
+# Reordenar columnas
+results <- results[, c("Genus", "Body_Site", "Taxa_Type", "Population",
+                       "Control_count", "Control_percent",
+                       "PE_count", "PE_percent", "Difference",
+                       "P_value", "Q_value")]
+
+# Ordenar por P_value
+results$P_value_numeric <- as.numeric(gsub("\\*", "", results$P_value))
+results <- results[order(results$P_value_numeric), ]
+results$P_value_numeric <- NULL
+
+# --- 8. Guardar resultados ---
+write.csv(results, "results/prev/prevalence_hisp_20to40_gut_sg.csv", row.names = FALSE)
+print(results)
+
+
+
+```
+
+#Prevalence all
+
+```{r}
+# --- Inicio del Script ---
+
+# Load phyloseq object
+physeq <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+physeq_genus <- tax_glom(physeq, taxrank = "Genus")
+
+# --- Función para Prevalencia y Cuentas ---
+calc_prevalence_counts <- function(physeq, group_var = "study_group", taxa_level = "Genus") {
+  counts <- as(otu_table(physeq), "matrix")
+  sample_inf <- data.frame(sample_data(physeq))
+  groups <- sample_inf[[group_var]]
+  taxa_names <- as.vector(tax_table(physeq)[, taxa_level])
+  taxa_names[is.na(taxa_names)] <- "Unclassified"
+  
+  results <- data.frame(Genus = taxa_names, stringsAsFactors = FALSE)
+  
+  for (g in unique(groups)) {
+    group_counts <- counts[, groups == g, drop = FALSE]
+    prevalence <- rowSums(group_counts > 0) / sum(groups == g) * 100
+    count <- rowSums(group_counts > 0)
+    results[[paste0("Prevalence_", g)]] <- prevalence
+    results[[paste0("Count_", g)]] <- count
+  }
+  return(results)
+}
+
+# --- Función para calcular p-valores Fisher ---
+calc_differences_pvalues <- function(prev_table, group1, group2, physeq, group_var = "study_group") {
+  results <- prev_table
+  sample_metadata <- data.frame(sample_data(physeq))
+  total1 <- sum(sample_metadata[[group_var]] == group1)
+  total2 <- sum(sample_metadata[[group_var]] == group2)
+
+  results$Difference <- results[[paste0("Prevalence_", group1)]] - results[[paste0("Prevalence_", group2)]]
+  
+  results$P_value <- sapply(1:nrow(results), function(i) {
+    present1 <- results[[paste0("Count_", group1)]][i]
+    present2 <- results[[paste0("Count_", group2)]][i]
+    absent1 <- total1 - present1
+    absent2 <- total2 - present2
+    table <- matrix(c(present1, present2, absent1, absent2), nrow = 2, byrow = TRUE)
+    fisher.test(table)$p.value
+  })
+  
+  results$Q_value <- p.adjust(results$P_value, method = "fdr")
+  return(results)
+}
+
+# --- Función para formatear la tabla final ---
+format_table <- function(data) {
+  data$P_value_formatted <- ifelse(is.na(data$P_value), "NA", sprintf("%.5f", data$P_value))
+  data$Significance <- ""
+  data$Significance[data$P_value < 0.05] <- "*"
+  data$Significance[data$P_value < 0.01] <- "**"
+  data$Significance[data$P_value < 0.001] <- "***"
+  
+  formatted <- data.frame(
+    Genus = data$Genus,
+    Control_count = data$Count_Control,
+    Control_percent = sprintf("%.2f%%", data$Prevalence_Control),
+    PE_count = data$Count_PE,
+    PE_percent = sprintf("%.2f%%", data$Prevalence_PE),
+    Difference = sprintf("%.2f%%", data$Difference),
+    P_value = paste0(data$P_value_formatted, data$Significance),
+    Q_value = sprintf("%.4f", data$Q_value),
+    stringsAsFactors = FALSE
+  )
+  return(formatted)
+}
+
+# --- ANALIZAR POR BODY SITE ---
+
+# Vaginal
+prev_vag <- calc_prevalence_counts(physeq_genus)
+final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_genus)
+final_vag <- final_vag[order(final_vag$P_value), ]  # 🔻 ordenar por p-valor
+table_vag <- format_table(final_vag)
+write.csv(table_vag, "results/prev/all_indiv_prevalencia_cuentas_stool.csv", row.names = FALSE)
+
+
+
+# Mostrar resultados ordenados
+cat("Tabla para Vaginal (Top 10):\n")
+print(head(table_vag, 10))
+
+
+
+```
+
+#prev for white
+
+```{r}
+
+# --- Inicio del Script ---
+physeq <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+physeq <- physeq
+physeq=subset_samples(physeq,race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina") 
+
+# Load phyloseq object
+
+physeq_genus <- tax_glom(physeq, taxrank = "Genus")
+
+# --- Función para Prevalencia y Cuentas ---
+calc_prevalence_counts <- function(physeq, group_var = "study_group", taxa_level = "Genus") {
+  counts <- as(otu_table(physeq), "matrix")
+  sample_inf <- data.frame(sample_data(physeq))
+  groups <- sample_inf[[group_var]]
+  taxa_names <- as.vector(tax_table(physeq)[, taxa_level])
+  taxa_names[is.na(taxa_names)] <- "Unclassified"
+  
+  results <- data.frame(Genus = taxa_names, stringsAsFactors = FALSE)
+  
+  for (g in unique(groups)) {
+    group_counts <- counts[, groups == g, drop = FALSE]
+    prevalence <- rowSums(group_counts > 0) / sum(groups == g) * 100
+    count <- rowSums(group_counts > 0)
+    results[[paste0("Prevalence_", g)]] <- prevalence
+    results[[paste0("Count_", g)]] <- count
+  }
+  return(results)
+}
+
+# --- Función para calcular p-valores Fisher ---
+calc_differences_pvalues <- function(prev_table, group1, group2, physeq, group_var = "study_group") {
+  results <- prev_table
+  sample_metadata <- data.frame(sample_data(physeq))
+  total1 <- sum(sample_metadata[[group_var]] == group1)
+  total2 <- sum(sample_metadata[[group_var]] == group2)
+
+  results$Difference <- results[[paste0("Prevalence_", group1)]] - results[[paste0("Prevalence_", group2)]]
+  
+  results$P_value <- sapply(1:nrow(results), function(i) {
+    present1 <- results[[paste0("Count_", group1)]][i]
+    present2 <- results[[paste0("Count_", group2)]][i]
+    absent1 <- total1 - present1
+    absent2 <- total2 - present2
+    table <- matrix(c(present1, present2, absent1, absent2), nrow = 2, byrow = TRUE)
+    fisher.test(table)$p.value
+  })
+  
+  results$Q_value <- p.adjust(results$P_value, method = "fdr")
+  return(results)
+}
+
+# --- Función para formatear la tabla final ---
+format_table <- function(data) {
+  data$P_value_formatted <- ifelse(is.na(data$P_value), "NA", sprintf("%.5f", data$P_value))
+  data$Significance <- ""
+  data$Significance[data$P_value < 0.05] <- "*"
+  data$Significance[data$P_value < 0.01] <- "**"
+  data$Significance[data$P_value < 0.001] <- "***"
+  
+  formatted <- data.frame(
+    Genus = data$Genus,
+    Control_count = data$Count_Control,
+    Control_percent = sprintf("%.2f%%", data$Prevalence_Control),
+    PE_count = data$Count_PE,
+    PE_percent = sprintf("%.2f%%", data$Prevalence_PE),
+    Difference = sprintf("%.2f%%", data$Difference),
+    P_value = paste0(data$P_value_formatted, data$Significance),
+    Q_value = sprintf("%.4f", data$Q_value),
+    stringsAsFactors = FALSE
+  )
+  return(formatted)
+}
+
+# --- ANALIZAR POR BODY SITE ---
+
+# Vaginal
+prev_vag <- calc_prevalence_counts(physeq_genus)
+final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_genus)
+final_vag <- final_vag[order(final_vag$P_value), ]  # 🔻 ordenar por p-valor
+table_vag <- format_table(final_vag)
+write.csv(table_vag, "results/prev/white_prevalencia_cuentas_stool.csv", row.names = FALSE)
+
+
+
+# Mostrar resultados ordenados
+cat("Tabla para Vaginal (Top 10):\n")
+print(head(table_vag, 10))
+
+
+```
+
+
+#prev for hispanics
+
+```{r}
+
+# --- Inicio del Script ---
+physeq <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+physeq <- physeq
+physeq <- subset_samples(physeq,   ethnicity == "Hispanic/Latina")
+
+# Load phyloseq object
+
+physeq_genus <- tax_glom(physeq, taxrank = "Genus")
+
+# --- Función para Prevalencia y Cuentas ---
+calc_prevalence_counts <- function(physeq, group_var = "study_group", taxa_level = "Genus") {
+  counts <- as(otu_table(physeq), "matrix")
+  sample_inf <- data.frame(sample_data(physeq))
+  groups <- sample_inf[[group_var]]
+  taxa_names <- as.vector(tax_table(physeq)[, taxa_level])
+  taxa_names[is.na(taxa_names)] <- "Unclassified"
+  
+  results <- data.frame(Genus = taxa_names, stringsAsFactors = FALSE)
+  
+  for (g in unique(groups)) {
+    group_counts <- counts[, groups == g, drop = FALSE]
+    prevalence <- rowSums(group_counts > 0) / sum(groups == g) * 100
+    count <- rowSums(group_counts > 0)
+    results[[paste0("Prevalence_", g)]] <- prevalence
+    results[[paste0("Count_", g)]] <- count
+  }
+  return(results)
+}
+
+# --- Función para calcular p-valores Fisher ---
+calc_differences_pvalues <- function(prev_table, group1, group2, physeq, group_var = "study_group") {
+  results <- prev_table
+  sample_metadata <- data.frame(sample_data(physeq))
+  total1 <- sum(sample_metadata[[group_var]] == group1)
+  total2 <- sum(sample_metadata[[group_var]] == group2)
+
+  results$Difference <- results[[paste0("Prevalence_", group1)]] - results[[paste0("Prevalence_", group2)]]
+  
+  results$P_value <- sapply(1:nrow(results), function(i) {
+    present1 <- results[[paste0("Count_", group1)]][i]
+    present2 <- results[[paste0("Count_", group2)]][i]
+    absent1 <- total1 - present1
+    absent2 <- total2 - present2
+    table <- matrix(c(present1, present2, absent1, absent2), nrow = 2, byrow = TRUE)
+    fisher.test(table)$p.value
+  })
+  
+  results$Q_value <- p.adjust(results$P_value, method = "fdr")
+  return(results)
+}
+
+# --- Función para formatear la tabla final ---
+format_table <- function(data) {
+  data$P_value_formatted <- ifelse(is.na(data$P_value), "NA", sprintf("%.5f", data$P_value))
+  data$Significance <- ""
+  data$Significance[data$P_value < 0.05] <- "*"
+  data$Significance[data$P_value < 0.01] <- "**"
+  data$Significance[data$P_value < 0.001] <- "***"
+  
+  formatted <- data.frame(
+    Genus = data$Genus,
+    Control_count = data$Count_Control,
+    Control_percent = sprintf("%.2f%%", data$Prevalence_Control),
+    PE_count = data$Count_PE,
+    PE_percent = sprintf("%.2f%%", data$Prevalence_PE),
+    Difference = sprintf("%.2f%%", data$Difference),
+    P_value = paste0(data$P_value_formatted, data$Significance),
+    Q_value = sprintf("%.4f", data$Q_value),
+    stringsAsFactors = FALSE
+  )
+  return(formatted)
+}
+
+# --- ANALIZAR POR BODY SITE ---
+
+# Vaginal
+prev_vag <- calc_prevalence_counts(physeq_genus)
+final_vag <- calc_differences_pvalues(prev_vag, "PE", "Control", physeq_genus)
+final_vag <- final_vag[order(final_vag$P_value), ]  # 🔻 ordenar por p-valor
+table_vag <- format_table(final_vag)
+write.csv(table_vag, "results/prev/hispanics_prevalencia_cuentas_stool.csv", row.names = FALSE)
+
+
+
+# Mostrar resultados ordenados
+cat("Tabla para Vaginal (Top 10):\n")
+print(head(table_vag, 10))
+
+
+```
+
+
+##plot
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+
+# Leer el archivo CSV
+df <- read_csv("/Users/danielavargasrobles/Dropbox\ (UMass\ Medical\ School)/Ana_projects/2_PREECLAMPSIA/Figures and tables/supp_text/supp_text_stool_prev_10.csv")
+
+# Extraer valor numérico del p-valor y filtrar por p < 0.05
+df <- df %>%
+  mutate(pval_num = as.numeric(str_extract(P_value, "\\d+\\.\\d+"))) %>%
+  filter(pval_num < 0.05)
+
+# Limpiar porcentajes y convertir a numérico
+df <- df %>%
+  mutate(
+    Control_percent = as.numeric(str_remove(Control_percent, "%")),
+    PE_percent = as.numeric(str_remove(PE_percent, "%"))
+  )
+
+# Reorganizar datos para ggplot
+df_long <- df %>%
+  pivot_longer(cols = c(Control_percent, PE_percent),
+               names_to = "Group", values_to = "Prevalence") %>%
+  mutate(Group = ifelse(Group == "Control_percent", "Control", "PE"))
+
+# Paleta personalizada
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# Graficar con facetas por contexto
+ggplot(df_long, aes(x = Prevalence, y = Genus, color = Group)) +
+  geom_point(size = 3, position = position_dodge(width = 0.6)) +
+  facet_wrap(~ Context, scales = "free_y") +
+  scale_color_manual(values = palette) +
+  theme_bw() +
+  labs(title = "Prevalence of Genera with p < 0.05 (Control vs PE)",
+       x = "Prevalence (%)", y = "Genus", color = "Group") +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.y = element_text(size = 10),
+    panel.grid.major.y = element_line(color = "gray80", linetype = "dashed"),
+    legend.position = "top"
+  )
+
+```
+#bar
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+
+# Leer datos
+df <- read_csv("/Users/danielavargasrobles/Dropbox\ (UMass\ Medical\ School)/Ana_projects/2_PREECLAMPSIA/Figures and tables/supp_text/supp_text_stool_prev_10.csv")
+# Extraer p numérica y filtrar p < 0.05
+
+# Extraer valor numérico del p-valor y filtrar p < 0.05
+df <- df %>%
+  mutate(pval_num = as.numeric(str_extract(P_value, "\\d+\\.\\d+"))) %>%
+  filter(pval_num < 0.05)
+
+# Preparar datos: incluir porcentajes, conteos y calcular tamaño de muestra estimado
+df_long <- df %>%
+  dplyr::select(Genus, Context, Control_count, PE_count, Control_percent, PE_percent) %>%
+  mutate(
+    Control_percent = as.numeric(str_remove(Control_percent, "%")),
+    PE_percent = as.numeric(str_remove(PE_percent, "%")),
+    Control_total = pmax(round(Control_count / Control_percent * 100), Control_count),
+    PE_total = pmax(round(PE_count / PE_percent * 100), PE_count)
+  ) %>%
+  pivot_longer(cols = c(Control_count, PE_count), names_to = "Group", values_to = "Count") %>%
+  mutate(
+    Total = ifelse(Group == "Control_count", Control_total, PE_total),
+    Group = ifelse(Group == "Control_count", "Control", "PE")
+  )
+
+# Calcular prevalencia e intervalos de confianza binomial (CI95%)
+# Calcular prevalencia e intervalos con manejo de errores
+df_long <- df_long %>%
+  rowwise() %>%
+  mutate(
+    Prevalence = Count / Total * 100,
+    CI_lower = tryCatch(binom.test(Count, Total)$conf.int[1] * 100, error = function(e) NA),
+    CI_upper = tryCatch(binom.test(Count, Total)$conf.int[2] * 100, error = function(e) NA)
+  ) %>%
+  ungroup()
+
+
+# Paleta personalizada
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# Guardar el gráfico como PDF
+ggplot_object <- ggplot(df_long, aes(x = Prevalence, y = reorder(Genus, Prevalence), fill = Group)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(xmin = CI_lower, xmax = CI_upper), 
+                position = position_dodge(width = 0.8), width = 0.3) +
+  facet_wrap(~ Context, scales = "free_y") +
+  scale_fill_manual(values = palette) +
+  theme_bw() +
+  labs(title = "Prevalence of Genera with p < 0.05 (with 95% CI)",
+       x = "Prevalence (%)", y = "Genus", fill = "Group") +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.y = element_text(size = 10),
+    legend.position = "top"
+  )
+
+# Guardar como PDF
+ggsave("supplementary_figure_barplot_ci95.pdf", plot = ggplot_object, 
+       width = 10, height = 7, units = "in", dpi = 300)
+
+```
+#prev ordenadas con p valores
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(forcats)
+
+# Leer datos
+df <- read_csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/Figures and tables/supp_text/supp_text_stool_prev_10.csv")
+
+# Extraer valor numérico del p-valor y filtrar p < 0.05
+df <- df %>%
+  mutate(pval_num = as.numeric(str_extract(P_value, "\\d+\\.\\d+"))) %>%
+  filter(pval_num < 0.05)
+
+# Crear etiqueta con nombre del género + p-valor
+df <- df %>%
+  mutate(Genus_label = paste0(Genus, " (p=", formatC(pval_num, format = "e", digits = 2), ")"))
+
+# Preparar datos: incluir porcentajes, conteos y calcular tamaño de muestra estimado
+df_long <- df %>%
+  dplyr::select(Genus_label, Context, Control_count, PE_count, Control_percent, PE_percent, pval_num) %>%
+  mutate(
+    Control_percent = as.numeric(str_remove(Control_percent, "%")),
+    PE_percent = as.numeric(str_remove(PE_percent, "%")),
+    Control_total = pmax(round(Control_count / Control_percent * 100), Control_count),
+    PE_total = pmax(round(PE_count / PE_percent * 100), PE_count)
+  ) %>%
+  pivot_longer(cols = c(Control_count, PE_count), names_to = "Group", values_to = "Count") %>%
+  mutate(
+    Total = ifelse(Group == "Control_count", Control_total, PE_total),
+    Group = ifelse(Group == "Control_count", "Control", "PE")
+  )
+
+# Calcular prevalencia e intervalos con manejo de errores
+df_long <- df_long %>%
+  rowwise() %>%
+  mutate(
+    Prevalence = Count / Total * 100,
+    CI_lower = tryCatch(binom.test(Count, Total)$conf.int[1] * 100, error = function(e) NA),
+    CI_upper = tryCatch(binom.test(Count, Total)$conf.int[2] * 100, error = function(e) NA)
+  ) %>%
+  ungroup()
+
+# Reordenar taxones por menor p-valor dentro de cada panel/contexto (de arriba a abajo)
+df_long <- df_long %>%
+  group_by(Context) %>%
+  mutate(Genus_label = fct_reorder(Genus_label, pval_num, .desc = FALSE)) %>%
+  ungroup()
+
+# Paleta personalizada
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# Crear gráfico
+ggplot_object <- ggplot(df_long, aes(x = Prevalence, y = fct_rev(Genus_label), fill = Group)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(xmin = CI_lower, xmax = CI_upper), 
+                position = position_dodge(width = 0.8), width = 0.3) +
+  facet_wrap(~ Context, scales = "free_y") +
+  scale_fill_manual(values = palette) +
+  theme_bw() +
+  labs(title = "Prevalence of Genera with p < 0.05 (ordered by p-value)",
+       x = "Prevalence (%)", y = "Genus (p-value)", fill = "Group") +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.y = element_text(size = 10),
+    legend.position = "top"
+  )
+
+# Guardar como PDF
+ggsave("results/prev/supplementary_figure_barplot_ci95_ordered_by_pval_with_labels.pdf", plot = ggplot_object, 
+       width = 11, height = 8, units = "in", dpi = 300)
+print(ggplot_object)
+```
+#prev ordenadas sin p values tetst
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(forcats)
+
+# Leer datos
+df <- read_csv("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/Figures and tables/supp_text/supp_text_stool_prev_10.csv")
+
+# Extraer valor numérico del p-valor y filtrar p < 0.05
+df <- df %>%
+  mutate(pval_num = as.numeric(str_extract(P_value, "\\d+\\.\\d+"))) %>%
+  filter(pval_num < 0.05)
+
+# Preparar datos largos
+df_long <- df %>%
+  dplyr::select(Genus, Context, Control_count, PE_count, Control_percent, PE_percent, pval_num) %>%
+  mutate(
+    Control_percent = as.numeric(str_remove(Control_percent, "%")),
+    PE_percent = as.numeric(str_remove(PE_percent, "%")),
+    Control_total = pmax(round(Control_count / Control_percent * 100), Control_count),
+    PE_total = pmax(round(PE_count / PE_percent * 100), PE_count)
+  ) %>%
+  pivot_longer(cols = c(Control_count, PE_count), names_to = "Group", values_to = "Count") %>%
+  mutate(
+    Total = ifelse(Group == "Control_count", Control_total, PE_total),
+    Group = ifelse(Group == "Control_count", "Control", "PE")
+  )
+
+# Calcular prevalencia y CI95% con manejo de errores
+df_long <- df_long %>%
+  rowwise() %>%
+  mutate(
+    Prevalence = Count / Total * 100,
+    CI_lower = tryCatch(binom.test(Count, Total)$conf.int[1] * 100, error = function(e) NA),
+    CI_upper = tryCatch(binom.test(Count, Total)$conf.int[2] * 100, error = function(e) NA)
+  ) %>%
+  ungroup()
+
+# Paleta de colores
+palette <- c("PE" = "#ff6347", "Control" = "#5a9bd4")
+
+# Función para graficar por contexto
+plot_by_context <- function(data, context_name, file_name) {
+  df_ctx <- data %>% filter(Context == context_name) %>%
+    mutate(Genus = fct_rev(fct_reorder(Genus, pval_num, .desc = FALSE)))
+
+  p <- ggplot(df_ctx, aes(x = Prevalence, y = Genus, fill = Group)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+    geom_errorbar(aes(xmin = CI_lower, xmax = CI_upper),
+                  position = position_dodge(width = 0.8), width = 0.3) +
+    scale_fill_manual(values = palette) +
+    theme_bw() +
+    labs(title = paste("Prevalence of Genera in", context_name),
+         x = "Prevalence (%)", y = "Genus", fill = "Group") +
+    theme(
+      axis.text.y = element_text(size = 10),
+      legend.position = "top"
+    )
+
+  ggsave(filename = file_name, plot = p, width = 5, height = 7, units = "in", dpi = 300)
+  print(p)
+}
+
+# Graficar y guardar los tres contextos
+plot_by_context(df_long, "All individuals", "results/prev/barplot_all_individuals.pdf")
+plot_by_context(df_long, "Hispanics", "results/prev/barplot_hispanics.pdf")
+plot_by_context(df_long, "Non-Hispanics White/Caucasian", "results/prev/barplot_whites.pdf")
+
+
+```
+# P/B ratio + levene, sg
+
+```{r}
+
+# P/B Ratio Analysis Script
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+#extract metadata from phyloseq object
+
+# 2. AGGREGATE ABUNDANCES AT GENUS LEVEL
+# --------------------------------------------------
+# This simplifies the object, summing up species into their respective genera
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+
+# 3. CALCULATE THE PREVOTELLA/BACTEROIDES RATIO
+# --------------------------------------------------
+# Extract the abundance table (OTU table)
+abund_table <- as.data.frame(otu_table(phy_genus))
+
+# Extract the taxonomy table to find our genera of interest
+tax_table <- as.data.frame(tax_table(phy_genus))
+
+# Get abundances for Prevotella and Bacteroides
+# The names will be like 'g__Prevotella' from GTDB
+prevotella_abund <- abund_table[tax_table$Genus == "Prevotella", ]
+bacteroides_abund <- abund_table[tax_table$Genus == "Bacteroides", ]
+
+# Check if both genera were found. If not, stop with a message.
+if (nrow(prevotella_abund) == 0 | nrow(bacteroides_abund) == 0) {
+  stop("Error: Prevotella or Bacteroides genus not found in the phyloseq object.")
+}
+
+# --- Handle Zeros and Calculate Ratio ---
+# We need to add a small "pseudocount" to avoid division by zero (e.g., Prevotella/0)
+# A good pseudocount is the smallest non-zero abundance in the original data
+all_abundances <- as.vector(as.matrix(abund_table))
+pseudocount <- min(all_abundances[all_abundances > 0]) / 10
+
+# Calculate the ratio. We use log10 for better statistical properties (normalization)
+pb_ratio_df <- data.frame(
+  study_id = names(prevotella_abund),
+  log10_PB_ratio = log10((as.numeric(prevotella_abund) + pseudocount) / (as.numeric(bacteroides_abund) + pseudocount))
+)
+
+
+# 4. MERGE RATIO WITH METADATA
+# --------------------------------------------------
+metadata <- as(sample_data(phy), "data.frame")
+
+# Ensure study_id is a column in metadata for merging
+if (!"study_id" %in% colnames(metadata)) {
+  metadata$study_id <- rownames(metadata)
+}
+
+# --- FIX: Ensure both study_id columns are the same type (character) ---
+metadata$study_id <- as.character(metadata$study_id)
+pb_ratio_df$study_id <- as.character(pb_ratio_df$study_id) # Good practice to ensure both are character
+
+# Now, merge the ratio data with metadata
+analysis_df <- inner_join(pb_ratio_df, metadata, by = "study_id")
+
+# 5. STATISTICAL COMPARISON
+# --------------------------------------------------
+# We will use the Wilcoxon Rank-Sum test (Mann-Whitney U), which is robust
+# and doesn't assume a normal distribution of the data.
+stat_test <- wilcox.test(log10_PB_ratio ~ study_group, data = analysis_df)
+
+# Print the results
+print(stat_test)
+
+# You could also use a linear model if you want to adjust for covariates
+# lm_model <- lm(log10_PB_ratio ~ study_group + bmi + ethnicity, data = analysis_df)
+# print(summary(lm_model))
+
+
+# 6. VISUALIZATION
+# --------------------------------------------------
+# Create a boxplot to visualize the differences
+p <- ggplot(analysis_df, aes(x = study_group, y = log10_PB_ratio, fill = study_group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.6) +
+  scale_fill_manual(values = c("PE" = "#ff6347", "Control" = "#5a9bd4")) +
+  labs(
+    title = "Prevotella/Bacteroides\n
+    levene test, p = 0.0002",
+    x = "Study Group",
+    y = "log10(P/B Ratio)"
+  ) +
+  # write a label on the plot 
+  
+  theme_bw(base_size = 14) +
+  theme(legend.position = "none") 
+  # Add the p-value from our test to the plot
+ # stat_compare_means(method = "levene", label.x.npc = "center", label.y = max(analysis_df$log10_PB_ratio) * 1.05)
+
+# Print the plot
+print(p)
+
+# Save the plot
+# ggsave("results/PB_ratio_by_study_group.pdf", plot = p, width = 6, height = 7)
+
+# Carga la librería
+library(car)
+
+# Realiza la Prueba de Levene para comparar las varianzas del ratio P/B entre los grupos de estudio
+# La fórmula es similar a la de un t.test o lm()
+levene_test_result <- leveneTest(log10_PB_ratio ~ study_group, data = analysis_df)
+
+# Imprime los resultados
+print(levene_test_result)
+# save plot
+ ggsave("results/B_P_ratio/study_group.pdf", plot = p, width = 2, height = 4)
+#save levene test csv
+write.csv(levene_test_result, "results/B_P_ratio/levene_test_study_group.csv", row.names = FALSE)
+# 2. Extrae los resultados y crea un data.frame
+wilcox_results_df <- data.frame(
+  method = stat_test$method,
+  statistic = stat_test$statistic,
+  p_value = stat_test$p.value,
+  alternative_hypothesis = stat_test$alternative
+)
+
+# 3. Ahora sí, guarda el data.frame en un CSV
+write.csv(wilcox_results_df, "results/B_P_ratio/wilcoxon_test_study_group.csv", row.names = FALSE)
+
+# Imprime para verificar
+print(wilcox_results_df)
+```
+#P/B ratio + levene, severe
+```{r}
+# P/B Ratio Analysis Script
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+# 2. AGGREGATE ABUNDANCES AT GENUS LEVEL
+# --------------------------------------------------
+# This step is identical to the previous script
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+
+
+# 3. CALCULATE THE PREVOTELLA/BACTEROIDES RATIO
+# --------------------------------------------------
+# This entire section is identical, as the ratio calculation is independent of the metadata comparison
+abund_table <- as.data.frame(otu_table(phy_genus))
+tax_table <- as.data.frame(tax_table(phy_genus))
+prevotella_abund <- abund_table[tax_table$Genus == "Prevotella", ]
+bacteroides_abund <- abund_table[tax_table$Genus == "Bacteroides", ]
+
+if (nrow(prevotella_abund) == 0 | nrow(bacteroides_abund) == 0) {
+  stop("Error: Prevotella or Bacteroides genus not found in the phyloseq object.")
+}
+
+all_abundances <- as.vector(as.matrix(abund_table))
+pseudocount <- min(all_abundances[all_abundances > 0]) / 10
+
+pb_ratio_df <- data.frame(
+  study_id = names(prevotella_abund),
+  log10_PB_ratio = log10((as.numeric(prevotella_abund) + pseudocount) / (as.numeric(bacteroides_abund) + pseudocount))
+)
+
+
+# 4. MERGE RATIO WITH METADATA AND FILTER
+# --------------------------------------------------
+metadata <- as(sample_data(phy), "data.frame")
+metadata$study_id <- as.character(metadata$study_id)
+pb_ratio_df$study_id <- as.character(pb_ratio_df$study_id)
+
+analysis_df <- inner_join(pb_ratio_df, metadata, by = "study_id")
+
+# --- NEW: Filter data for the specific comparison ---
+# We only want to compare 'Yes' vs 'No' for the 'severe' variable.
+# This also removes any samples where 'severe' might be NA.
+analysis_severe_df <- analysis_df %>%
+  filter(severe %in% c("Yes", "No"))
+
+
+# 5. STATISTICAL COMPARISON (for 'severe')
+# --------------------------------------------------
+# Perform Wilcoxon test on the filtered data using the 'severe' column
+stat_test_severe <- wilcox.test(log10_PB_ratio ~ severe, data = analysis_severe_df)
+
+# Print the results
+print(stat_test_severe)
+
+
+# 6. VISUALIZATION (for 'severe')
+# --------------------------------------------------
+# Create a boxplot using the 'severe' variable for grouping and color
+# Using the color palette you defined in your original Rmd for severity
+p_severe <- ggplot(analysis_severe_df, aes(x = severe, y = log10_PB_ratio, fill = severe)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0, size = 2.5, alpha = 0.6) +
+  scale_fill_manual(values = c("Yes" = "#CC3300", "No" = "orange")) +
+  labs(
+    title = "Prevotella/Bacteroides\n
+    levene test, p = 0.2286",
+    x = "Study Group",
+    y = "log10(P/B Ratio)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(legend.position = "none")
+  # Add the p-value from our test
+ # stat_compare_means(method = "wilcox.test", label.x.npc = "center")
+
+# Print the plot
+print(p_severe)
+
+#levene test
+library(car)
+# Perform Levene's Test for homogeneity of variances
+levene_test_severe <- leveneTest(log10_PB_ratio ~ severe, data = analysis_severe_df)
+# Print the results of Levene's Test
+print(levene_test_severe)
+# Save the plot
+ggsave("results/B_P_ratio/sev.pdf", plot = p_severe, width = 2, height = 4)
+#save levene test csv
+write.csv(levene_test_severe, "results/B_P_ratio/levene_test_severe.csv", row.names = FALSE)  
+#wilcox test results
+wilcox_results_severe_df <- data.frame(
+  method = stat_test_severe$method,
+  statistic = stat_test_severe$statistic,
+  p_value = stat_test_severe$p.value,
+  alternative_hypothesis = stat_test_severe$alternative
+)
+
+# Save the Wilcoxon test results to a CSV file
+write.csv(wilcox_results_severe_df, "results/B_P_ratio/wilcoxon_test_severe.csv", row.names = FALSE)
+```
+
+## P/B ratio + levene, sg stratified ethnicity
+
+```{r}
+# P/B Ratio Analysis Script: Stratified by Ethnicity
+
+# 1. LOAD LIBRARIES
+# --------------------------------------------------
+# install.packages(c("phyloseq", "dplyr", "ggplot2", "ggpubr", "car"))
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(car) # For Levene's Test
+
+# 2. CALCULATE THE PREVOTELLA/BACTEROIDES RATIO
+# --------------------------------------------------
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+abund_table <- as.data.frame(otu_table(phy_genus))
+tax_table <- as.data.frame(tax_table(phy_genus))
+prevotella_abund <- abund_table[tax_table$Genus == "Prevotella", ]
+bacteroides_abund <- abund_table[tax_table$Genus == "Bacteroides", ]
+
+if (nrow(prevotella_abund) == 0 | nrow(bacteroides_abund) == 0) {
+  stop("Error: Prevotella or Bacteroides genus not found in the phyloseq object.")
+}
+
+all_abundances <- as.vector(as.matrix(abund_table))
+pseudocount <- min(all_abundances[all_abundances > 0]) / 10
+
+pb_ratio_df <- data.frame(
+  study_id = names(prevotella_abund),
+  log10_PB_ratio = log10((as.numeric(prevotella_abund) + pseudocount) / (as.numeric(bacteroides_abund) + pseudocount))
+)
+
+
+# 3. MERGE WITH METADATA AND CREATE STRATIFICATION VARIABLE
+# --------------------------------------------------
+metadata <- as(sample_data(phy), "data.frame")
+metadata$study_id <- as.character(metadata$study_id)
+pb_ratio_df$study_id <- as.character(pb_ratio_df$study_id)
+
+analysis_df <- inner_join(pb_ratio_df, metadata, by = "study_id")
+
+analysis_stratified_df <- analysis_df %>%
+  mutate(ethnic_group = case_when(
+    ethnicity == "Hispanic/Latina" ~ "Hispanic",
+    race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina" ~ "White/Caucasian",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(ethnic_group))
+
+
+# 4. STATISTICAL TESTING
+# --------------------------------------------------
+# --- Levene's Test for Homogeneity of Variances ---
+# We run the test for each ethnic group separately.
+# The null hypothesis is that the variances are equal across study groups.
+# A p-value > 0.05 suggests we cannot reject the null hypothesis (variances are equal).
+# NOTE: We use do() which is a more robust way to apply complex functions to groups.
+# This ensures the test is run on each subset of data correctly.
+
+levene_results <- analysis_stratified_df %>%
+  group_by(ethnic_group) %>%
+  do({
+    # Perform the Levene's test on the subset of data for the current group
+    test <- leveneTest(log10_PB_ratio ~ study_group, data = .)
+    # Return the results as a data frame
+    data.frame(
+      levene_stat = test$'F value'[1],
+      p_value = test$'Pr(>F)'[1]
+    )
+  })
+
+cat("--- Levene's Test Results ---\n")
+print(levene_results)
+cat("\n")
+
+
+# 5. VISUALIZATION WITH FACETS
+# --------------------------------------------------
+# ggplot's facet_wrap() will create separate panels for each level of 'ethnic_group'.
+# stat_compare_means will automatically run the test within each panel.
+
+p_stratified <- ggplot(analysis_stratified_df, aes(x = study_group, y = log10_PB_ratio, fill = study_group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.6) +
+  
+  # This is the key part: creates a plot for each ethnic group
+  facet_wrap(~ ethnic_group) +
+  
+  scale_fill_manual(values = c("PE" = "#ff6347", "Control" = "#5a9bd4")) +
+  labs(
+    title = "Prevotella/Bacteroides Ratio by Study Group",
+    subtitle = "Stratified by Ethnicity",
+    x = "Study Group",
+    y = "log10(P/B Ratio)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "grey85", color = "black"), # Style facet titles
+    strip.text = element_text(face = "bold")
+    ) +
+  # Add the p-value for the comparison within each facet panel
+  stat_compare_means(method = "wilcox.test", label.x.npc = "center")
+
+# Print the final plot
+print(p_stratified)
+
+# Save the plot
+
+# Save the plot
+ggsave("results/B_P_ratio/stratified_sg.pdf", plot = p_stratified, width = 3.5, height = 4)
+#save levene test csv
+write.csv(levene_results, "results/B_P_ratio/levene_test_stratified_sg.csv", row.names = FALSE)
+
+# wilcox test
+
+# 2. Extrae los resultados y crea un data.frame
+wilcox_results_df <- data.frame(
+  method = stat_test$method,
+  statistic = stat_test$statistic,
+  p_value = stat_test$p.value,
+  alternative_hypothesis = stat_test$alternative
+)
+
+
+
+# --- Wilcoxon Test for each ethnic group ---
+# Usamos el mismo patrón: group_by() %>% do()
+# La función broom::tidy() convierte el resultado del test en una tabla limpia.
+wilcox_results <- analysis_stratified_df %>%
+  group_by(ethnic_group) %>%
+  do({
+    test <- wilcox.test(log10_PB_ratio ~ study_group, data = .)
+    tidy(test)
+  })
+
+cat("--- Wilcoxon Test Results (Stratified) ---\n")
+print(wilcox_results)
+cat("\n")
+
+# Save the Wilcoxon test results to a CSV file
+write.csv(wilcox_results, "results/B_P_ratio/wilcoxon_test_stratified_sg.csv", row.names = FALSE)
+```
+
+## P/B ratio + levene, sev stratified ethnicity 
+```{r}
+ #P/B Ratio Analysis Script: by Severity, Stratified by Ethnicity
+
+# 1. LOAD LIBRARIES
+# --------------------------------------------------
+# install.packages(c("phyloseq", "dplyr", "ggplot2", "ggpubr", "car"))
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(car) # For Levene's Test
+
+# Load your phyloseq object
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+
+# 2. CALCULATE THE PREVOTELLA/BACTEROIDES RATIO
+# --------------------------------------------------
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+abund_table <- as.data.frame(otu_table(phy_genus))
+tax_table <- as.data.frame(tax_table(phy_genus))
+prevotella_abund <- abund_table[tax_table$Genus == "Prevotella", ]
+bacteroides_abund <- abund_table[tax_table$Genus == "Bacteroides", ]
+
+if (nrow(prevotella_abund) == 0 | nrow(bacteroides_abund) == 0) {
+  stop("Error: Prevotella or Bacteroides genus not found in the phyloseq object.")
+}
+
+all_abundances <- as.vector(as.matrix(abund_table))
+pseudocount <- min(all_abundances[all_abundances > 0]) / 10
+
+pb_ratio_df <- data.frame(
+  study_id = names(prevotella_abund),
+  log10_PB_ratio = log10((as.numeric(prevotella_abund) + pseudocount) / (as.numeric(bacteroides_abund) + pseudocount))
+)
+
+
+# 3. MERGE WITH METADATA, STRATIFY AND FILTER
+# --------------------------------------------------
+metadata <- as(sample_data(phy), "data.frame")
+metadata$study_id <- as.character(metadata$study_id)
+pb_ratio_df$study_id <- as.character(pb_ratio_df$study_id)
+
+analysis_df <- inner_join(pb_ratio_df, metadata, by = "study_id")
+
+# --- NEW: Create ethnicity groups AND filter for severity comparison ---
+analysis_stratified_df <- analysis_df %>%
+  mutate(ethnic_group = case_when(
+    ethnicity == "Hispanic/Latina" ~ "Hispanic",
+    race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina" ~ "White/Caucasian",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(ethnic_group)) %>% # Remove samples not in our ethnic groups
+  filter(severe %in% c("Yes", "No")) # Also keep only samples for severity comparison
+
+
+# 4. STATISTICAL TESTING (for 'severe', stratified by 'ethnic_group')
+# --------------------------------------------------
+# We now group by 'ethnic_group' to run tests on each subset.
+
+# --- Levene's Test for Homogeneity of Variances ---
+levene_results_severe <- analysis_stratified_df %>%
+  group_by(ethnic_group) %>%
+  do({
+    test <- leveneTest(log10_PB_ratio ~ severe, data = .)
+    data.frame(levene_stat = test$'F value'[1], p_value = test$'Pr(>F)'[1])
+  })
+
+cat("--- Levene's Test Results (Severity) ---\n")
+print(levene_results_severe)
+cat("\n")
+
+# --- Wilcoxon Rank Sum Test ---
+wilcox_results_severe <- analysis_stratified_df %>%
+  group_by(ethnic_group) %>%
+  do({
+    test <- wilcox.test(log10_PB_ratio ~ severe, data = .)
+    data.frame(statistic = test$statistic, p.value = test$p.value)
+  })
+
+cat("--- Wilcoxon Test Results (Severity) ---\n")
+print(wilcox_results_severe)
+cat("\n")
+
+
+# 5. VISUALIZATION (for 'severe', stratified)
+# --------------------------------------------------
+p_severe_stratified <- ggplot(analysis_stratified_df, aes(x = severe, y = log10_PB_ratio, fill = severe)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.6) +
+  
+  # Create a plot for each ethnic group
+  facet_wrap(~ ethnic_group) +
+  
+  scale_fill_manual(values = c("Yes" = "#CC3300", "No" = "orange")) +
+  labs(
+    title = "Prevotella/Bacteroides Ratio by Severity",
+    subtitle = "Stratified by Ethnicity",
+    x = "Severe Preeclampsia",
+    y = "log10(P/B Ratio)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "grey85", color = "black"),
+    strip.text = element_text(face = "bold")
+  ) +
+  # Add the p-value for the comparison within each facet panel
+  stat_compare_means(method = "wilcox.test", label.x.npc = "center")
+
+# Print the final plot
+print(p_severe_stratified)
+
+# Save the plot
+# Save the plot
+ggsave("results/B_P_ratio/p_severe_stratified.pdf", plot = p_severe_stratified, width = 4, height = 4)
+#save levene test csv
+write.csv(levene_results_severe, "results/B_P_ratio/levene_test_severe_stratified.csv", row.names = FALSE)
+
+# Save the Wilcoxon test by exnicity
+write.csv(wilcox_results_severe, "results/B_P_ratio/wilcoxon_test_severe_stratified.csv", row.names = FALSE)
+
+```
+
+# explorando cluster con P:B
+
+```{r}
+# AUTOMATED SCRIPT - ENGLISH VERSION & PREFIX REMOVED
+
+# 1. SETUP: Load libraries
+# --------------------------------------------------
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+
+# 2. DATA LOADING
+# --------------------------------------------------
+# We assume the 'phy' object is already loaded in your R environment.
+# If not, load it with:
+# phy <- readRDS("path/to/your/phy_object.rds") 
+
+# 3. METADATA EXTRACTION FROM PHYLOSEQ
+# --------------------------------------------------
+# Instead of reading a CSV, we extract the metadata data.frame directly from the phyloseq object.
+metadata_from_phy <- as(sample_data(phy), "data.frame")
+
+# 4. P/B RATIO CALCULATION
+# --------------------------------------------------
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+abund_table <- as.data.frame(otu_table(phy_genus))
+tax_table <- as.data.frame(tax_table(phy_genus))
+
+# --- NEW: Remove "g__" prefix from Genus names ---
+tax_table$Genus <- gsub("g__", "", tax_table$Genus)
+
+# Select abundances using the cleaned names
+prevotella_abund <- abund_table[tax_table$Genus == "Prevotella", ]
+bacteroides_abund <- abund_table[tax_table$Genus == "Bacteroides", ]
+
+if (nrow(prevotella_abund) == 0 | nrow(bacteroides_abund) == 0) {
+  stop("Error: Prevotella or Bacteroides not found in the phyloseq object.")
+}
+
+all_abundances <- as.vector(as.matrix(abund_table))
+pseudocount <- min(all_abundances[all_abundances > 0]) / 10
+
+pb_ratio_df <- data.frame(
+  study_id = names(prevotella_abund),
+  log10_PB_ratio = log10((as.numeric(prevotella_abund) + pseudocount) / (as.numeric(bacteroides_abund) + pseudocount))
+)
+
+# 5. FINAL DATAFRAME PREPARATION FOR ANALYSIS
+# --------------------------------------------------
+metadata_from_phy$study_id <- as.character(metadata_from_phy$study_id)
+pb_ratio_df$study_id <- as.character(pb_ratio_df$study_id)
+analysis_df <- inner_join(pb_ratio_df, metadata_from_phy, by = "study_id")
+control_median_ratio <- median(analysis_df$log10_PB_ratio[analysis_df$study_group == "Control"], na.rm = TRUE)
+
+instability_df <- analysis_df %>%
+  mutate(ratio_instability = abs(log10_PB_ratio - control_median_ratio)) %>%
+  filter(!is.na(ratio_instability))
+
+# 6. FUNCTION FOR CORRELATION AND PLOTTING (no changes to logic)
+# --------------------------------------------------
+analyze_instability_correlation <- function(df, clinical_variable, x_label) {
+  df_filtered <- df %>% filter(!is.na(.data[[clinical_variable]]))
+  if (nrow(df_filtered) < 5) {
+    message(paste("   -> Skipping:", x_label, "(insufficient data)"))
+    return(NULL)
+  }
+  corr_test <- cor.test(df_filtered$ratio_instability, df_filtered[[clinical_variable]], method = "spearman", exact = FALSE)
+  rho <- round(corr_test$estimate, 2)
+  p_val <- format.pval(corr_test$p.value, digits = 3, eps = 0.001)
+  
+  p <- ggplot(df_filtered, aes(x = .data[[clinical_variable]], y = ratio_instability)) +
+    geom_point(aes(color = study_group), size = 3, alpha = 0.7) +
+    geom_smooth(method = "lm", color = "black", linetype = "dashed") +
+    scale_color_manual(values = c("PE" = "#ff6347", "Control" = "#5a9bd4")) +
+    labs(
+      title = paste("P/B Ratio Instability vs.", x_label),
+      subtitle = paste("Spearman's Rho =", rho, "| p-value =", p_val),
+      x = x_label,
+      y = "Ratio Instability (Distance from Control Median)"
+    ) +
+    theme_bw(base_size = 14)
+  
+  print(p)
+  return(corr_test)
+}
+
+# 7. AUTOMATED EXECUTION WITH THE CORRECTED VARIABLE LIST
+# --------------------------------------------------
+# Vector with the desired numerical variables and their plot-friendly names.
+desired_variables <- c(
+  "age" = "Age",
+  "bmi" = "BMI",
+  "gravid" = "Gravidity (No. of pregnancies)",
+  "par" = "Parity (No. of births)",
+  "pre_weight" = "Pre-pregnancy Weight",
+  "gwg" = "Gestational Weight Gain",
+  "gestational_age" = "Gestational Age at Delivery",
+  "maternal_temp" = "Maternal Temperature",
+  "rom_hours" = "Hours Since Rupture of Membranes",
+  "baby_weight" = "Neonate Weight (kg)",
+  "apgar_1" = "APGAR at 1 min",
+  "apgar_5" = "APGAR at 5 min",
+  "baby_temp_delivery" = "Neonate Temperature at Birth",
+  "cord_ph" = "Umbilical Cord pH",
+  "ph_value" = "pH Value"
+)
+
+# --- NEW: Check for variable existence ---
+# Get the columns that ACTUALLY exist in your dataframe
+actual_columns <- colnames(instability_df)
+
+# Filter the desired variables list to keep only those that exist
+variables_to_analyze <- desired_variables[names(desired_variables) %in% actual_columns]
+
+# Informative message
+cat("The following", length(variables_to_analyze), "variables were found in the data and will be analyzed:\n")
+print(names(variables_to_analyze))
+
+# Create a list to store all results
+all_results <- list()
+
+# Loop through EACH EXISTING VARIABLE and analyze it
+for (variable_column in names(variables_to_analyze)) {
+  
+  plot_label <- variables_to_analyze[[variable_column]]
+  
+  cat("\n\n=====================================================\n")
+  cat("--- Analyzing correlation with:", plot_label, "---\n")
+  cat("=====================================================\n")
+  
+  test_result <- tryCatch({
+    analyze_instability_correlation(
+      df = instability_df,
+      clinical_variable = variable_column,
+      x_label = plot_label
+    )
+  }, error = function(e) {
+    message("ERROR analyzing ", variable_column, ": ", e$message)
+    return(NULL)
+  })
+  
+  all_results[[variable_column]] <- test_result
+}
+```
+#comparar esos 7 PE individuos con alto P:B ratio con los 7 PE individuos con bajo P:B ratio
+
+```{r}
+# SCRIPT FOR EXTREME GROUP ANALYSIS IN PREECLAMPSIA
+
+# 1. SETUP & DATA PREPARATION (Same as before)
+# --------------------------------------------------
+# Load libraries
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(vegan) # For adonis2
+
+# Load phyloseq object 'phy' and extract metadata
+# phy <- readRDS("path/to/your/phy_object.rds") 
+metadata_from_phy <- as(sample_data(phy), "data.frame")
+
+# Calculate P/B Ratio and create the main analysis dataframe
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+tax_table(phy_genus)$Genus <- gsub("g__", "", tax_table(phy_genus)$Genus)
+abund_table <- as.data.frame(otu_table(phy_genus))
+tax_table_df <- as.data.frame(tax_table(phy_genus))
+prevotella_abund <- abund_table[tax_table_df$Genus == "Prevotella", ]
+bacteroides_abund <- abund_table[tax_table_df$Genus == "Bacteroides", ]
+all_abundances <- as.vector(as.matrix(abund_table))
+pseudocount <- min(all_abundances[all_abundances > 0]) / 10
+pb_ratio_df <- data.frame(
+  study_id = names(prevotella_abund),
+  log10_PB_ratio = log10((as.numeric(prevotella_abund) + pseudocount) / (as.numeric(bacteroides_abund) + pseudocount))
+)
+metadata_from_phy$study_id <- as.character(metadata_from_phy$study_id)
+pb_ratio_df$study_id <- as.character(pb_ratio_df$study_id)
+analysis_df <- inner_join(pb_ratio_df, metadata_from_phy, by = "study_id")
+
+
+# 2. DEFINE THE "HIGH P/B RATIO" SUBGROUP
+# --------------------------------------------------
+# First, let's visualize the distribution of the ratio ONLY within the PE group to find a threshold.
+ggplot(filter(analysis_df, study_group == "PE"), aes(x = log10_PB_ratio)) + 
+  geom_density(fill = "#ff6347", alpha = 0.7) +
+  geom_rug() +
+  labs(title = "Distribution of P/B Ratio in PE Patients", x = "log10(P/B Ratio)") +
+  theme_bw()
+
+# Based on the plot, choose a threshold that separates your ~7 high samples.
+# I will use 2.5 as a placeholder. YOU SHOULD ADJUST THIS VALUE.
+high_ratio_threshold <- 2.5 
+
+# Create a new column to define the subgroups within the PE patients
+pe_subgroups_df <- analysis_df %>%
+  filter(study_group == "PE") %>%
+  mutate(PE_subgroup = case_when(
+    log10_PB_ratio >= high_ratio_threshold ~ "PE_High_Ratio",
+    TRUE ~ "PE_Normal_Ratio"
+  ))
+
+
+# 3. CLINICAL CHARACTERIZATION OF SUBGROUPS
+# --------------------------------------------------
+# Compare clinical variables between the 'PE_High_Ratio' and 'PE_Normal_Ratio' groups.
+
+# Example for a continuous variable: Gestational Age
+wilcox.test(gestational_age ~ PE_subgroup, data = pe_subgroups_df)
+ggplot(pe_subgroups_df, aes(x = PE_subgroup, y = gestational_age, fill = PE_subgroup)) +
+  geom_boxplot() + stat_compare_means() + theme_bw() +
+  labs(title = "Gestational Age by PE Subgroup")
+
+# Example for a categorical variable: Presence of Severe Features
+# Note: 'sev_features_PE_Headache_scotomata' should be a factor (Yes/No)
+# table() creates a contingency table for Fisher's test
+contingency_table <- table(pe_subgroups_df$PE_subgroup, pe_subgroups_df$sev_features_PE_Headache_scotomata)
+fisher.test(contingency_table)
+
+# You should repeat this for all your key clinical variables.
+
+
+# 4. MICROBIOME DIVERSITY CHARACTERIZATION
+# --------------------------------------------------
+# Is the overall microbiome different between these two PE subgroups?
+
+# A) Alpha Diversity
+# Using the pre-calculated alpha diversity metrics (sha, simp, obs) from your metadata.
+# There is no need to recalculate them.
+
+# --- Compare Shannon Diversity ---
+# Test
+wilcox.test(sha ~ PE_subgroup, data = pe_subgroups_df)
+
+# Plot
+ggplot(pe_subgroups_df, aes(x = PE_subgroup, y = sha, fill = PE_subgroup)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.7) +
+  stat_compare_means(method = "wilcox.test") +
+  theme_bw() +
+  labs(title = "Shannon Diversity by PE Subgroup", y = "Shannon Diversity ('sha')")
+
+
+# --- Compare Simpson Diversity ---
+# Test
+wilcox.test(simp ~ PE_subgroup, data = pe_subgroups_df)
+
+# Plot
+ggplot(pe_subgroups_df, aes(x = PE_subgroup, y = simp, fill = PE_subgroup)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.7) +
+  stat_compare_means(method = "wilcox.test") +
+  theme_bw() +
+  labs(title = "Simpson Diversity by PE Subgroup", y = "Simpson Diversity ('simp')")
+
+
+# --- Compare Observed Richness ---
+# Test
+wilcox.test(obs ~ PE_subgroup, data = pe_subgroups_df)
+
+# Plot
+ggplot(pe_subgroups_df, aes(x = PE_subgroup, y = obs, fill = PE_subgroup)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.7) +
+  stat_compare_means(method = "wilcox.test") +
+  theme_bw() +
+  labs(title = "Observed Richness by PE Subgroup", y = "Observed Features ('obs')")
+
+
+# B) Beta Diversity (This section remains the same as before)
+# ...
+# B) Beta Diversity
+# Let's see if the overall community structure is different.
+# First, filter the phyloseq object to only include PE samples
+phy_pe_only <- subset_samples(phy, study_group == "PE")
+
+# Align metadata with the phyloseq object
+pe_meta <- data.frame(sample_data(phy_pe_only))
+pe_meta$PE_subgroup <- pe_subgroups_df$PE_subgroup[match(rownames(pe_meta), pe_subgroups_df$study_id)]
+sample_data(phy_pe_only) <- pe_meta
+
+# Calculate Bray-Curtis distance
+dist_bray_pe <- phyloseq::distance(phy_pe_only, method = "bray")
+
+# Run PERMANOVA (adonis2)
+adonis2(dist_bray_pe ~ PE_subgroup, data = pe_meta, permutations = 999)
+
+# Visualize with a PCoA plot
+pcoa_pe <- ordinate(phy_pe_only, method = "PCoA", distance = dist_bray_pe)
+plot_ordination(phy_pe_only, pcoa_pe, color = "PE_subgroup") +
+  theme_bw() +
+  stat_ellipse() +
+  labs(title = "PCoA of PE Subgroups (Bray-Curtis)")
+```
+# SCRIPT PARA CARACTERIZACIÓN CLÍNICA DE SUBGRUPOS DE PE
+
+```{r}
+# SCRIPT PARA CARACTERIZACIÓN CLÍNICA DE SUBGRUPOS DE PE
+
+# 1. SETUP Y PREPARACIÓN DE DATOS (Asegúrate de tener estos objetos)
+# -------------------------------------------------------------------
+library(phyloseq)
+library(dplyr)
+
+# Asumimos que 'phy' y 'analysis_df' ya existen en tu entorno.
+# Si no, créalos con los pasos de los scripts anteriores.
+# Por completitud, aquí está el código para crear pe_subgroups_df:
+
+# --- Definición del umbral (AJUSTA ESTE VALOR BASADO EN TU GRÁFICO DE DENSIDAD) ---
+high_ratio_threshold <- 2.5 
+
+pe_subgroups_df <- analysis_df %>%
+  filter(study_group == "PE") %>%
+  mutate(PE_subgroup = factor(case_when(
+    log10_PB_ratio >= high_ratio_threshold ~ "PE_High_Ratio",
+    TRUE ~ "PE_Normal_Ratio"
+  )))
+
+# 2. DEFINIR LAS VARIABLES A PROBAR
+# -------------------------------------------------------------------
+# Creamos un vector con los nombres de todas las columnas de metadatos que queremos comparar.
+# He seleccionado las más relevantes de tu lista, omitiendo IDs y fechas.
+variables_clinicas_a_probar <- c(
+  # Demográficas
+  "age", "bmi", "race", "ethnicity", 
+  # Historial obstétrico
+  "gravid", "par", "pre_weight", "gwg", 
+  # Diagnósticos y condiciones
+  "probiotic", "antibiotics_during_pregnancy", "infection", "diabetes", 
+  "sev_features_PE_Blood_pressure", "sev_features_PE_Renal", 
+  "sev_features_PE_Liver", "sev_features_PE_HELLP", "sev_features_PE_Pulmonary_edema",
+  "sev_features_PE_Headache_scotomata", "sev_features_PE_Thrombocytopenia",
+  # Eventos del parto
+  "gestational_age", "term_status", "antibiotic_during_labor",
+  # Resultados neonatales
+  "baby_weight", "sex_of_baby", "apgar_1", "apgar_5", "baby_nicu",
+  # Laboratorio
+  "platelet_count_delivery", "ast_delivery", "alt_delivery", "creatinine_delivery"
+)
+
+
+# 3. BUCLE DE ANÁLISIS AUTOMATIZADO
+# -------------------------------------------------------------------
+# Este bucle recorrerá cada variable, determinará su tipo, aplicará el test correcto
+# e imprimirá el resultado.
+
+# Creamos una lista para guardar los resultados significativos
+resultados_significativos <- list()
+
+for (variable in variables_clinicas_a_probar) {
+  
+  # Imprime un encabezado para cada variable para que la salida sea clara
+  cat("\n--------------------------------------------------\n")
+  cat("Analizando variable:", variable, "\n")
+  cat("--------------------------------------------------\n")
+  
+  # --- Verificación de seguridad: ¿la columna existe? ---
+  if (!variable %in% colnames(pe_subgroups_df)) {
+    cat("   -> Advertencia: La variable '", variable, "' no se encontró en los datos. Omitiendo.\n")
+    next # Salta a la siguiente variable en el bucle
+  }
+  
+  # Crea la fórmula para los tests
+  formula <- as.formula(paste0("`", variable, "` ~ PE_subgroup"))
+  
+  # --- Comprueba si la variable es numérica o un contador ---
+  if (is.numeric(pe_subgroups_df[[variable]])) {
+    
+    # Realiza la prueba de Wilcoxon para variables numéricas
+    test_resultado <- wilcox.test(formula, data = pe_subgroups_df)
+    cat("Tipo: Numérica | Test: Wilcoxon rank-sum\n")
+    cat("   -> p-valor:", format.pval(test_resultado$p.value, digits = 4), "\n")
+    
+    # Si el resultado es significativo, guárdalo
+    if (test_resultado$p.value < 0.1) { # Usamos 0.1 como umbral exploratorio
+      resultados_significativos[[variable]] <- test_resultado
+    }
+    
+  } else { # --- Si no es numérica, la tratamos como categórica ---
+    
+    # Crea una tabla de contingencia
+    tabla <- table(pe_subgroups_df[[variable]], pe_subgroups_df$PE_subgroup)
+    
+    # Comprobación de seguridad: Fisher necesita que la tabla tenga más de 1 fila y columna
+    if (nrow(tabla) > 1 && ncol(tabla) > 1) {
+      # Realiza la prueba Exacta de Fisher
+      test_resultado <- fisher.test(tabla)
+      cat("Tipo: Categórica | Test: Fisher's Exact\n")
+      print(tabla)
+      cat("   -> p-valor:", format.pval(test_resultado$p.value, digits = 4), "\n")
+      
+      # Si el resultado es significativo, guárdalo
+      if (test_resultado$p.value < 0.1) {
+        resultados_significativos[[variable]] <- test_resultado
+      }
+    } else {
+      cat("   -> Omitiendo test para '", variable, "' (no hay variación en uno de los grupos).\n")
+      print(tabla)
+    }
+  }
+}
+
+# 4. REVISAR RESULTADOS SIGNIFICATIVOS
+# -------------------------------------------------------------------
+cat("\n\n##################################################\n")
+cat("### RESUMEN DE RESULTADOS SIGNIFICATIVOS (p < 0.1) ###\n")
+cat("##################################################\n")
+
+if (length(resultados_significativos) > 0) {
+  print(resultados_significativos)
+} else {
+  cat("No se encontraron diferencias significativas con un umbral de p < 0.1\n")
+}
+```
+
+# SCRIPT PARA ANÁLISIS DE SUBGRUPOS DE PE ESTRATIFICADO POR ETNICIDAD
+
+```{r}
+# SCRIPT PARA ANÁLISIS DE SUBGRUPOS DE PE ESTRATIFICADO POR ETNICIDAD
+
+# 1. SETUP Y PREPARACIÓN DE DATOS (Pasos iniciales como antes)
+# -------------------------------------------------------------------
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+
+# Asumimos que 'phy' y 'analysis_df' ya existen en tu entorno.
+# Si no, créalos con el código de los scripts anteriores.
+# analysis_df debe contener: study_id, log10_PB_ratio, study_group, y todas las variables clínicas.
+
+
+# 2. DEFINIR LOS GRUPOS ÉTNICOS Y FILTRAR DATOS
+# -------------------------------------------------------------------
+# Creamos una nueva columna para nuestros grupos de interés
+# y filtramos para quedarnos solo con las muestras de esos grupos.
+analysis_stratified_df <- analysis_df %>%
+  mutate(ethnic_group = case_when(
+    ethnicity == "Hispanic/Latina" ~ "Hispanic",
+    race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina" ~ "White",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(ethnic_group), study_group == "PE") # Nos enfocamos solo en pacientes con PE
+
+# 3. IDENTIFICAR LOS SUBGRUPOS "HIGH-RATIO" DENTRO DE CADA GRUPO ÉTNICO
+# -------------------------------------------------------------------
+# En lugar de un umbral fijo, definiremos el grupo "High-Ratio" como
+# el ~25% superior de pacientes dentro de cada grupo étnico. Esto es más robusto.
+# Puedes ajustar el porcentaje (quantile_threshold) si lo deseas.
+
+quantile_threshold <- 0.75 # (1.0 - 0.75 = 0.25, o sea el 25% superior)
+
+pe_ethnic_subgroups_df <- analysis_stratified_df %>%
+  group_by(ethnic_group) %>% # Importante: agrupar por etnicidad
+  mutate(PE_subgroup = case_when(
+    log10_PB_ratio >= quantile(log10_PB_ratio, quantile_threshold, na.rm = TRUE) ~ "PE_High_Ratio",
+    TRUE ~ "PE_Normal_Ratio"
+  )) %>%
+  ungroup() # Desagrupar para análisis posteriores
+
+# Visualicemos los subgrupos que hemos creado
+ggplot(pe_ethnic_subgroups_df, aes(x = ethnic_group, y = log10_PB_ratio, color = PE_subgroup)) +
+  geom_jitter(width = 0.2, size = 3, alpha = 0.8) +
+  theme_bw() +
+  labs(title = "Subgrupos de Ratio P/B definidos dentro de cada Grupo Étnico")
+
+
+# 4. BUCLE DE ANÁLISIS CLÍNICO AUTOMATIZADO Y ESTRATIFICADO
+# -------------------------------------------------------------------
+# Definimos las variables a probar
+variables_clinicas_a_probar <- c(
+  "age", "bmi", "gravid", "par", "pre_weight", "gwg", "gestational_age",
+  "baby_weight", "apgar_1", "apgar_5"
+  # Puedes añadir más variables numéricas aquí
+)
+
+# Bucle principal que itera sobre cada variable clínica
+for (variable in variables_clinicas_a_probar) {
+  
+  cat("\n========================================================\n")
+  cat("### Analizando Variable Clínica:", variable, "###\n")
+  cat("========================================================\n")
+  
+  # --- ANÁLISIS PARA EL GRUPO HISPANIC ---
+  cat("\n--- Grupo: Hispanic ---\n")
+  
+  # Filtramos los datos solo para este grupo
+  df_hispanic <- pe_ethnic_subgroups_df %>% filter(ethnic_group == "Hispanic")
+  
+  # Comprobamos si hay suficientes datos para comparar
+  if (n_distinct(df_hispanic$PE_subgroup) == 2) {
+    # Realizamos la prueba de Wilcoxon
+    test_hisp <- wilcox.test(as.formula(paste0("`", variable, "` ~ PE_subgroup")), data = df_hispanic)
+    cat("   -> p-valor (Wilcoxon):", format.pval(test_hisp$p.value, digits = 4), "\n")
+  } else {
+    cat("   -> No hay suficientes subgrupos para comparar.\n")
+  }
+  
+  # --- ANÁLISIS PARA EL GRUPO WHITE ---
+  cat("\n--- Grupo: White ---\n")
+  
+  # Filtramos los datos solo para este grupo
+  df_white <- pe_ethnic_subgroups_df %>% filter(ethnic_group == "White")
+  
+  # Comprobamos si hay suficientes datos para comparar
+  if (n_distinct(df_white$PE_subgroup) == 2) {
+    # Realizamos la prueba de Wilcoxon
+    test_white <- wilcox.test(as.formula(paste0("`", variable, "` ~ PE_subgroup")), data = df_white)
+    cat("   -> p-valor (Wilcoxon):", format.pval(test_white$p.value, digits = 4), "\n")
+  } else {
+    cat("   -> No hay suficientes subgrupos para comparar.\n")
+  }
+}
+
+```
+#calprotectin sg sin ajuste
+
+```{r}
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+met$pregnant_woman_fecal_calpro_mg_kg
+#comparar calprotectin entre PE y controles
+#by study group
+ggplot(met, aes(x = study_group, y = pregnant_woman_fecal_calpro_mg_kg, fill = study_group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.6) +
+  scale_fill_manual(values = c("PE" = "#ff6347", "Control" = "#5a9bd4")) +
+  labs(
+    title = "Calprotectin Levels by Study Group",
+    x = "Study Group",
+    y = "Calprotectin (ng/mL)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(legend.position = "none") +
+  stat_compare_means(method = "wilcox.test", label.x.npc = "center")
+
+#comparar calprotectin entre ELISA_run
+ggplot(met, aes(x = ELISA_run, y = pregnant_woman_fecal_calpro_mg_kg, fill = ELISA_run)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.6) +
+  labs(
+    title = "Calprotectin Levels by Study Group",
+    x = "Study Group",
+    y = "Calprotectin (ng/mL)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(legend.position = "none") +
+  stat_compare_means(method = "kruskal", label.x.npc = "center")
+
+
+
+```
+#calprotectin sg - ajuste por ELISA_run
+
+```{r}
+#lm of pregnant_woman_fecal_calpro_mg_kg by study_group ajusting by ELISA_run
+# Load necessary libraries
+library(lme4)
+library(lmerTest) # To get p-values for mixed models
+library(emmeans)  # For post-hoc analysis
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+# Assume 'met' dataframe is already loaded
+
+# 1. Check distribution of the dependent variable
+hist(met$pregnant_woman_fecal_calpro_mg_kg, 
+     main = "Distribution of Calprotectin", 
+     xlab = "Calprotectin (mg/kg)")
+
+# It's likely right-skewed. Let's create a log-transformed version.
+# We use log1p() which calculates log(x + 1) to handle potential zeros.
+met$log_calpro <- log1p(met$pregnant_woman_fecal_calpro_mg_kg)
+
+hist(met$log_calpro, 
+     main = "Distribution of Log-Transformed Calprotectin",
+     xlab = "log(Calprotectin + 1)")
+
+# Ensure ELISA_run is a factor
+met$ELISA_run <- as.factor(met$ELISA_run)
+met$study_group <- as.factor(met$study_group)
+
+# 2. Build the Linear Model
+# We model log_calpro as a function of study_group, adjusting for ELISA_run
+fit_lm <- lm(log_calpro ~ study_group + ELISA_run, data = met)
+
+# 3. Check the model summary
+summary(fit_lm)
+
+# To get a clean ANOVA table which is often easier to interpret:
+anova(fit_lm)
+```
+#ahora ajustando por lote
+
+```{r}
+# 4. Build a Linear Mixed-Effects Model (LMM)
+# We model study_group as a fixed effect and ELISA_run as a random effect
+# The syntax (1 | ELISA_run) tells the model to fit a random intercept for each level of ELISA_run
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+fit_lmm <- lmer(log_calpro ~ study_group + (1 | ELISA_run), data = met)
+
+# Get the summary and ANOVA-like table for the fixed effects
+summary(fit_lmm)
+anova(fit_lmm)
+
+```
+#calprotectin sev strat ethnicity
+```{r}
+# Load necessary libraries if not already loaded
+library(dplyr)
+library(lme4)
+library(lmerTest)
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+# We use the original 'met' dataframe which contains all subjects (PE and Controls)
+
+# --- Analysis for Hispanic/Latina Group ---
+
+cat("====================================================\n")
+cat("ANALYSIS FOR: Hispanic/Latina Group (PE vs Control)\n")
+cat("====================================================\n\n")
+
+# 1.a. Create a subset from the full dataframe for the Hispanic/Latina group
+met_hisp_full <- met %>%
+  filter(ethnicity == "Hispanic/Latina")
+
+# 1.b. CRITICAL STEP: Check sample size for PE and Controls in this stratum
+cat("Sample counts for 'study_group' in Hispanic/Latina group:\n")
+print(table(met_hisp_full$study_group))
+cat(paste("Total samples in this group:", nrow(met_hisp_full), "\n\n"))
+
+# Only proceed if you have enough samples in both PE and Control groups
+if (all(table(met_hisp_full$study_group) > 5) && nrow(met_hisp_full) > 15) {
+  # 1.c. Build and run the LMM for the Hispanic/Latina group
+  fit_lmm_hisp_full <- lmer(log_calpro ~ study_group + (1 | ELISA_run), data = met_hisp_full)
+  
+  cat("Model Summary (Hispanic/Latina):\n")
+  print(summary(fit_lmm_hisp_full))
+  
+  cat("\nANOVA Table (Hispanic/Latina):\n")
+  print(anova(fit_lmm_hisp_full))
+} else {
+  cat("Warning: Not enough samples to run a reliable model for the Hispanic/Latina group.\n")
+}
+
+
+# --- Analysis for White/Caucasian (Not Hispanic/Latina) Group ---
+
+cat("\n\n====================================================\n")
+cat("ANALYSIS FOR: White/Caucasian Group (PE vs Control)\n")
+cat("====================================================\n\n")
+
+# 2.a. Create a subset for the White/Caucasian group
+met_white_full <- met %>%
+  filter(race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+# 2.b. CRITICAL STEP: Check sample size in this stratum
+cat("Sample counts for 'study_group' in White/Caucasian group:\n")
+print(table(met_white_full$study_group))
+cat(paste("Total samples in this group:", nrow(met_white_full), "\n\n"))
+
+# Only proceed if you have enough samples
+if (all(table(met_white_full$study_group) > 5) && nrow(met_white_full) > 15) {
+  # 2.c. Build and run the LMM for the White/Caucasian group
+  fit_lmm_white_full <- lmer(log_calpro ~ study_group + (1 | ELISA_run), data = met_white_full)
+  
+  cat("Model Summary (White/Caucasian):\n")
+  print(summary(fit_lmm_white_full))
+  
+  cat("\nANOVA Table (White/Caucasian):\n")
+  print(anova(fit_lmm_white_full))
+} else {
+  cat("Warning: Not enough samples to run a reliable model for the White/Caucasian group.\n")
+}
+
+```
+
+
+#calprotectin sev
+```{r}
+# Load necessary libraries if not already loaded
+library(dplyr)
+library(lme4)
+library(lmerTest)
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+# Assume 'met' dataframe is already loaded and contains the 'log_calpro' variable
+
+# 1. Filter the data to include only PE cases
+# We create a new dataframe 'met_pe' that excludes the controls
+met_pe <- met %>%
+  filter(severe_3cat != "Control")
+
+# It's good practice to check the new variable of interest
+# This tells you how many samples you have in each group
+cat("Sample counts for 'severe' variable within PE cases:\n")
+print(table(met_pe$severe))
+
+# 2. Build the Linear Mixed-Effects Model (LMM)
+# We model log_calpro as a function of severity ('severe'), 
+# while controlling for ELISA_run as a random effect.
+# Make sure 'severe' is a factor for the model
+met_pe$severe <- as.factor(met_pe$severe)
+
+fit_lmm_severe <- lmer(log_calpro ~ severe + (1 | ELISA_run), data = met_pe)
+
+
+# 3. Evaluate the model and get the results
+# Get the summary with p-values for the fixed effects
+cat("\nModel Summary:\n")
+print(summary(fit_lmm_severe))
+
+# Get the clean ANOVA-like table
+cat("\nANOVA Table for Fixed Effects:\n")
+print(anova(fit_lmm_severe))
+```
+#calprotectin sev strat ethnicity
+```{r}
+
+# Load necessary libraries if not already loaded
+library(dplyr)
+library(lme4)
+library(lmerTest)
+
+# We assume 'met_pe' dataframe (PE cases only) from the previous step is available
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+# --- Analysis for Hispanic/Latina Group ---
+
+cat("====================================================\n")
+cat("ANALYSIS FOR: Hispanic/Latina Group\n")
+cat("====================================================\n\n")
+
+# 1.a. Create a subset for the Hispanic/Latina group
+met_hisp <- met_pe %>%
+  filter(ethnicity == "Hispanic/Latina")
+
+# 1.b. CRITICAL STEP: Check sample size in this stratum
+cat("Sample counts for 'severe' in Hispanic/Latina group:\n")
+print(table(met_hisp$severe))
+cat(paste("Total samples in this group:", nrow(met_hisp), "\n\n"))
+
+# Only proceed if you have enough samples in both 'Yes' and 'No' groups
+if (all(table(met_hisp$severe) > 5) && nrow(met_hisp) > 15) {
+  # 1.c. Build and run the LMM for the Hispanic/Latina group
+  fit_lmm_hisp <- lmer(log_calpro ~ severe + (1 | ELISA_run), data = met_hisp)
+  
+  cat("Model Summary (Hispanic/Latina):\n")
+  print(summary(fit_lmm_hisp))
+  
+  cat("\nANOVA Table (Hispanic/Latina):\n")
+  print(anova(fit_lmm_hisp))
+} else {
+  cat("Warning: Not enough samples to run a reliable model for the Hispanic/Latina group.\n")
+}
+
+
+# --- Analysis for White/Caucasian (Not Hispanic/Latina) Group ---
+
+cat("\n\n====================================================\n")
+cat("ANALYSIS FOR: White/Caucasian (Not Hispanic/Latina) Group\n")
+cat("====================================================\n\n")
+
+# 2.a. Create a subset for the White/Caucasian group
+met_white <- met_pe %>%
+  filter(race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina")
+
+# 2.b. CRITICAL STEP: Check sample size in this stratum
+cat("Sample counts for 'severe' in White/Caucasian group:\n")
+print(table(met_white$severe))
+cat(paste("Total samples in this group:", nrow(met_white), "\n\n"))
+
+# Only proceed if you have enough samples
+if (all(table(met_white$severe) > 5) && nrow(met_white) > 15) {
+  # 2.c. Build and run the LMM for the White/Caucasian group
+  fit_lmm_white <- lmer(log_calpro ~ severe + (1 | ELISA_run), data = met_white)
+  
+  cat("Model Summary (White/Caucasian):\n")
+  print(summary(fit_lmm_white))
+  
+  cat("\nANOVA Table (White/Caucasian):\n")
+  print(anova(fit_lmm_white))
+} else {
+  cat("Warning: Not enough samples to run a reliable model for the White/Caucasian group.\n")
+}
+```
+#comparacion white vs Hispnic
+```{r}
+# Load necessary libraries if not already loaded
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(ggplot2)
+
+# We use the original 'met' dataframe with all subjects
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+#extract metadta
+met <- as(sample_data(phy), "data.frame")
+# 1. Prepare the data for comparison
+# Create a new dataframe containing only the two groups of interest
+# And create a single, clean 'ethnicity_group' factor
+met_ethnic_comparison <- met %>%
+  mutate(ethnicity_group = case_when(
+    ethnicity == "Hispanic/Latina" ~ "Hispanic/Latina",
+    race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina" ~ "White/Caucasian",
+    TRUE ~ "Other" # Categorize all others as 'Other'
+  )) %>%
+  filter(ethnicity_group %in% c("Hispanic/Latina", "White/Caucasian")) %>%
+  mutate(ethnicity_group = factor(ethnicity_group)) # Re-factor to drop unused levels
+
+# Check the final counts
+cat("Sample counts for the comparison:\n")
+print(table(met_ethnic_comparison$ethnicity_group, met_ethnic_comparison$study_group))
+
+
+# 2. Build the Linear Mixed-Effects Model (LMM)
+# We model log_calpro as a function of ethnicity_group, 
+# adjusting for study_group and controlling for ELISA_run.
+fit_lmm_ethnic <- lmer(log_calpro ~ ethnicity_group + study_group + (1 | ELISA_run), 
+                       data = met_ethnic_comparison)
+
+cat("\n\n--- Model Results ---\n")
+# Get the ANOVA-like table for the fixed effects
+print(anova(fit_lmm_ethnic))
+
+# For more detail on the direction of the effect
+print(summary(fit_lmm_ethnic))
+
+
+# 3. Visualize the results
+# A boxplot is great for visualization. Faceting by study_group is helpful.
+ggplot(met_ethnic_comparison, aes(x = ethnicity_group, y = log_calpro, fill = ethnicity_group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(width = 0.2, height = 0, alpha = 0.6) +
+  facet_wrap(~study_group) + # <-- Separate plots for Control and PE
+  scale_fill_manual(values = c("Hispanic/Latina" = "#ef8a62", "White/Caucasian" = "#67a9cf")) +
+  labs(
+    title = "Calprotectin Levels by Ethnicity, Stratified by Study Group",
+    x = "Ethnicity Group",
+    y = "log(Calprotectin + 1)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 15, hjust = 1))
+```
+#Summary table
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+library(rstatix) # For easy Wilcoxon tests
+
+# --- 1. Data Preparation ---
+# Same data preparation as before
+met_clean <- met %>%
+  rename(calprotectin = pregnant_woman_fecal_calpro_mg_kg) %>%
+  mutate(ethnicity_group = case_when(
+    ethnicity == "Hispanic/Latina" ~ "Hispanic",
+    race == "White/Caucasian" & ethnicity == "Not Hispanic/Latina" ~ "White",
+    TRUE ~ "Other"
+  )) %>%
+  filter(ethnicity_group %in% c("Hispanic", "White")) %>%
+  mutate(
+    study_group = factor(study_group, levels = c("Control", "PE")),
+    severe = factor(severe, levels = c("No", "Yes"))
+  )
+
+# --- 2. Generate Table 1: Preeclampsia Status ---
+
+# Create an empty list to store results for each row
+results_list_status <- list()
+
+# -- Row 1: All Individuals --
+data_subset <- met_clean
+desc_stats <- data_subset %>% group_by(study_group) %>% summarise(med = median(calprotectin, na.rm=T), mn = mean(calprotectin, na.rm=T))
+p_val <- data_subset %>% wilcox_test(calprotectin ~ study_group) %>% pull(p)
+results_list_status[['All']] <- tibble(
+  Group = "All individuals",
+  Control = paste0(round(desc_stats$med[1],1), " (", round(desc_stats$mn[1],1), ")"),
+  PE = paste0(round(desc_stats$med[2],1), " (", round(desc_stats$mn[2],1), ")"),
+  `P value` = round(p_val, 3)
+)
+
+# -- Row 2: Hispanic --
+data_subset <- met_clean %>% filter(ethnicity_group == "Hispanic")
+desc_stats <- data_subset %>% group_by(study_group) %>% summarise(med = median(calprotectin, na.rm=T), mn = mean(calprotectin, na.rm=T))
+p_val <- data_subset %>% wilcox_test(calprotectin ~ study_group) %>% pull(p)
+results_list_status[['Hispanic']] <- tibble(
+  Group = "Hispanic",
+  Control = paste0(round(desc_stats$med[1],1), " (", round(desc_stats$mn[1],1), ")"),
+  PE = paste0(round(desc_stats$med[2],1), " (", round(desc_stats$mn[2],1), ")"),
+  `P value` = round(p_val, 3)
+)
+
+# -- Row 3: White --
+data_subset <- met_clean %>% filter(ethnicity_group == "White")
+desc_stats <- data_subset %>% group_by(study_group) %>% summarise(med = median(calprotectin, na.rm=T), mn = mean(calprotectin, na.rm=T))
+p_val <- data_subset %>% wilcox_test(calprotectin ~ study_group) %>% pull(p)
+results_list_status[['White']] <- tibble(
+  Group = "White",
+  Control = paste0(round(desc_stats$med[1],1), " (", round(desc_stats$mn[1],1), ")"),
+  PE = paste0(round(desc_stats$med[2],1), " (", round(desc_stats$mn[2],1), ")"),
+  `P value` = round(p_val, 3)
+)
+
+# Combine all rows into a single table
+table1_status <- bind_rows(results_list_status)
+
+
+# --- 3. Generate Table 2: Preeclampsia Severe Features ---
+
+met_pe_only <- met_clean %>% filter(study_group == "PE")
+results_list_severe <- list()
+
+# -- Row 1: All Individuals (PE only) --
+data_subset <- met_pe_only
+desc_stats <- data_subset %>% group_by(severe) %>% summarise(med = median(calprotectin, na.rm=T), mn = mean(calprotectin, na.rm=T))
+p_val <- data_subset %>% wilcox_test(calprotectin ~ severe) %>% pull(p)
+results_list_severe[['All']] <- tibble(
+  Group = "All individuals",
+  Without = paste0(round(desc_stats$med[1],1), " (", round(desc_stats$mn[1],1), ")"),
+  With = paste0(round(desc_stats$med[2],1), " (", round(desc_stats$mn[2],1), ")"),
+  `P value` = round(p_val, 3)
+)
+
+# -- Row 2: Hispanic (PE only) --
+data_subset <- met_pe_only %>% filter(ethnicity_group == "Hispanic")
+desc_stats <- data_subset %>% group_by(severe) %>% summarise(med = median(calprotectin, na.rm=T), mn = mean(calprotectin, na.rm=T))
+p_val <- data_subset %>% wilcox_test(calprotectin ~ severe) %>% pull(p)
+results_list_severe[['Hispanic']] <- tibble(
+  Group = "Hispanic",
+  Without = paste0(round(desc_stats$med[1],1), " (", round(desc_stats$mn[1],1), ")"),
+  With = paste0(round(desc_stats$med[2],1), " (", round(desc_stats$mn[2],1), ")"),
+  `P value` = round(p_val, 3)
+)
+
+# -- Row 3: White (PE only) --
+data_subset <- met_pe_only %>% filter(ethnicity_group == "White")
+desc_stats <- data_subset %>% group_by(severe) %>% summarise(med = median(calprotectin, na.rm=T), mn = mean(calprotectin, na.rm=T))
+p_val <- data_subset %>% wilcox_test(calprotectin ~ severe) %>% pull(p)
+results_list_severe[['White']] <- tibble(
+  Group = "White",
+  Without = paste0(round(desc_stats$med[1],1), " (", round(desc_stats$mn[1],1), ")"),
+  With = paste0(round(desc_stats$med[2],1), " (", round(desc_stats$mn[2],1), ")"),
+  `P value` = round(p_val, 3)
+)
+
+# Combine all rows into a single table
+table2_severity <- bind_rows(results_list_severe)
+
+
+# --- 4. Display Final Tables ---
+cat("====================================================================\n")
+cat("      Tabla: Comparación de Calprotectina por Estado de Preeclampsia\n")
+cat("====================================================================\n")
+print(table1_status, row.names = FALSE)
+
+cat("\n\n")
+cat("====================================================================\n")
+cat("      Tabla: Comparación de Calprotectina por Severidad (solo en PE)\n")
+cat("====================================================================\n")
+print(table2_severity, row.names = FALSE)
+```
+
+```{r}
+
+phy <- readRDS("/Users/danielavargasrobles/Dropbox (UMass Medical School)/Ana_projects/2_PREECLAMPSIA/WGS/obj/phy_mtph_gtdb.rds")
+
+# Load the taxonomy table from the phyloseq object
+tax_table_df <- as.data.frame(tax_table(phy))
+
+# Check the column names to identify where the genus is stored
+colnames(tax_table_df)
+
+# Extract the row(s) where the Genus is "g__CAG-170"
+cag_170_taxonomy <- tax_table_df[which(tax_table_df[, "Genus"] == "CAG-170"), ]
+cag_170_taxonomy <- tax_table_df[which(tax_table_df[, "Genus"] == "Akkermansia"), ]
+
+ 
+# Print the taxonomy
+print(cag_170_taxonomy)
+
+po=as.data.frame(tax_table(phy))
+unique(po$Genus)
+
+```
+
